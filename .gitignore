@@ -1,0 +1,29 @@
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/playwright-report/
+frontend/test-results/
+frontend/.env.local
+
+# Backend
+backend/.venv/
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/.coverage
+backend/htmlcov/
+backend/tmp/
+
+# Python
+__pycache__/
+*.py[cod]
+.python-version
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local environment
+.env
+

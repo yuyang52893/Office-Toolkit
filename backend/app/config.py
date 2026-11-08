@@ -1,0 +1,46 @@
+from pathlib import Path
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+    )
+
+    app_name: str = "轻办公工具箱 API"
+    app_env: str = "development"
+    api_prefix: str = "/api/v1"
+    temp_root: Path = Path("./tmp")
+    retention_minutes: int = Field(default=30, ge=1, le=1440)
+    cleanup_interval_seconds: int = Field(default=60, ge=10, le=3600)
+    max_file_mb: int = Field(default=50, ge=1, le=500)
+    max_task_mb: int = Field(default=100, ge=1, le=1000)
+    max_files: int = Field(default=20, ge=1, le=100)
+    max_sheets: int = Field(default=100, ge=1, le=500)
+    max_output_files: int = Field(default=1000, ge=1, le=5000)
+    max_sheet_rows: int = Field(default=200_000, ge=1, le=1_000_000)
+    max_sheet_columns: int = Field(default=1000, ge=1, le=5000)
+    max_xlsx_uncompressed_mb: int = Field(default=250, ge=1, le=2000)
+    max_xlsx_entries: int = Field(default=10_000, ge=1, le=100_000)
+    excel_timeout_seconds: int = Field(default=120, ge=5, le=900)
+    excel_concurrency: int = Field(default=2, ge=1, le=8)
+    qr_max_mb: int = Field(default=10, ge=1, le=100)
+    qr_max_pixels: int = Field(default=40_000_000, ge=1_000_000, le=200_000_000)
+
+    @property
+    def max_file_bytes(self) -> int:
+        return self.max_file_mb * 1024 * 1024
+
+    @property
+    def max_task_bytes(self) -> int:
+        return self.max_task_mb * 1024 * 1024
+
+    @property
+    def qr_max_bytes(self) -> int:
+        return self.qr_max_mb * 1024 * 1024
+

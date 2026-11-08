@@ -1,0 +1,228 @@
+from datetime import UTC, datetime, timedelta
+
+from conftest import (
+    make_csv_bytes,
+    make_xls_bytes,
+    make_xlsx_bytes,
+    read_xlsx_rows,
+    read_zip_files,
+    sheet_refs,
+    upload_files,
+)
+from fastapi.testclient import TestClient
+
+from app.repositories.temp_storage import TempStorage
+
+
+def test_health_and_request_id(client: TestClient):
+    response = client.get("/api/v1/health", headers={"X-Request-ID": "request123"})
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == "request123"
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["status"] == "ok"
+    assert body["error"] is None
+
+
+def test_inspect_xlsx_xls_and_csv(client: TestClient):
+    upload = upload_files(
+        client,
+        [
+            (
+                "销售.xlsx",
+                make_xlsx_bytes(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+            ("旧表.xls", make_xls_bytes(), "application/vnd.ms-excel"),
+            ("清单.csv", make_csv_bytes("gb18030"), "text/csv"),
+        ],
+    )
+    assert upload["upload_id"]
+    assert len(upload["files"]) == 3
+    assert upload["files"][0]["format"] == "xlsx"
+    assert [sheet["name"] for sheet in upload["files"][0]["sheets"]] == ["销售", "库存"]
+    assert upload["files"][0]["sheets"][0]["headers"] == ["地区", "金额", "备注"]
+    assert upload["files"][0]["sheets"][0]["row_count"] == 3
+    assert upload["files"][1]["format"] == "xls"
+    assert upload["files"][1]["sheets"][0]["headers"] == ["姓名", "部门"]
+    assert upload["files"][2]["format"] == "csv"
+    assert upload["files"][2]["sheets"][0]["headers"] == ["名称", "数量"]
+
+
+def test_split_by_sheet_creates_single_sheet_files(client: TestClient):
+    upload = upload_files(client, [("销售.xlsx", make_xlsx_bytes(), "application/octet-stream")])
+    response = client.post(
+        "/api/v1/excel/split",
+        json={
+            "upload_id": upload["upload_id"],
+            "mode": "by_sheet",
+            "sheets": sheet_refs(upload),
+            "has_header": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()["data"]
+    assert result["output_count"] == 2
+
+    download = client.get(result["download_url"])
+    assert download.status_code == 200
+    files = read_zip_files(download.content)
+    assert len(files) == 2
+    for content in files.values():
+        assert len(read_xlsx_rows(content)) == 1
+
+
+def test_split_by_rows_repeats_header_and_keeps_csv_format(client: TestClient):
+    xlsx_upload = upload_files(
+        client,
+        [("销售.xlsx", make_xlsx_bytes(), "application/octet-stream")],
+    )
+    sales_sheet = sheet_refs(xlsx_upload)[0]
+    response = client.post(
+        "/api/v1/excel/split",
+        json={
+            "upload_id": xlsx_upload["upload_id"],
+            "mode": "by_rows",
+            "sheets": [sales_sheet],
+            "rows_per_file": 2,
+            "has_header": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    files = read_zip_files(client.get(response.json()["data"]["download_url"]).content)
+    assert len(files) == 2
+    chunks = sorted(read_xlsx_rows(content)["数据"] for content in files.values())
+    assert chunks[0][0] == ["地区", "金额", "备注"]
+    assert chunks[1][0] == ["地区", "金额", "备注"]
+    assert sum(len(chunk) - 1 for chunk in chunks) == 3
+
+    csv_upload = upload_files(
+        client,
+        [("清单.csv", make_csv_bytes("gb18030"), "text/csv")],
+    )
+    response = client.post(
+        "/api/v1/excel/split",
+        json={
+            "upload_id": csv_upload["upload_id"],
+            "mode": "by_rows",
+            "sheets": sheet_refs(csv_upload),
+            "rows_per_file": 2,
+            "has_header": True,
+        },
+    )
+    files = read_zip_files(client.get(response.json()["data"]["download_url"]).content)
+    assert all(name.endswith(".csv") for name in files)
+    assert all(content.startswith(b"\xef\xbb\xbf") for content in files.values())
+
+
+def test_cleanup_options_remove_duplicate_and_empty_rows(client: TestClient):
+    csv_content = "名称,数量\n苹果,3\n\n苹果,3\n香蕉,5\n"
+    upload = upload_files(
+        client,
+        [("清单.csv", csv_content.encode("utf-8"), "text/csv")],
+    )
+    response = client.post(
+        "/api/v1/excel/split",
+        json={
+            "upload_id": upload["upload_id"],
+            "mode": "by_rows",
+            "sheets": sheet_refs(upload),
+            "rows_per_file": 10,
+            "has_header": True,
+            "remove_empty_rows": True,
+            "remove_duplicates": True,
+        },
+    )
+    files = read_zip_files(client.get(response.json()["data"]["download_url"]).content)
+    csv_text = next(iter(files.values())).decode("utf-8-sig")
+    assert csv_text.splitlines() == ["名称,数量", "苹果,3", "香蕉,5"]
+
+
+def test_split_by_column_groups_values(client: TestClient):
+    upload = upload_files(client, [("销售.xlsx", make_xlsx_bytes(), "application/octet-stream")])
+    response = client.post(
+        "/api/v1/excel/split",
+        json={
+            "upload_id": upload["upload_id"],
+            "mode": "by_column",
+            "sheets": [sheet_refs(upload)[0]],
+            "column_index": 0,
+            "has_header": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    files = read_zip_files(client.get(response.json()["data"]["download_url"]).content)
+    assert len(files) == 2
+    assert any("华东" in name for name in files)
+
+
+def test_merge_strict_and_by_name(client: TestClient):
+    upload = upload_files(
+        client,
+        [
+            ("销售.xlsx", make_xlsx_bytes(), "application/octet-stream"),
+            ("旧表.xls", make_xls_bytes(), "application/vnd.ms-excel"),
+        ],
+    )
+    references = sheet_refs(upload)
+    mismatch = client.post(
+        "/api/v1/excel/merge",
+        json={
+            "upload_id": upload["upload_id"],
+            "sheets": references[:2],
+            "has_header": True,
+            "header_strategy": "strict",
+        },
+    )
+    assert mismatch.status_code == 400
+    assert mismatch.json()["error"]["code"] == "HEADER_MISMATCH"
+
+    merged = client.post(
+        "/api/v1/excel/merge",
+        json={
+            "upload_id": upload["upload_id"],
+            "sheets": references[:2],
+            "has_header": True,
+            "header_strategy": "by_name",
+        },
+    )
+    assert merged.status_code == 200, merged.text
+    download = client.get(merged.json()["data"]["download_url"])
+    rows = read_xlsx_rows(download.content)["合并结果"]
+    assert rows[0] == ["地区", "金额", "备注", "商品", "数量"]
+    assert rows[1][:3] == ["华东", 100, "A"]
+    assert rows[4][3:] == ["铅笔", 20]
+
+
+def test_invalid_and_oversized_files_return_structured_errors(client: TestClient):
+    unsupported = client.post(
+        "/api/v1/excel/inspect",
+        files={"files": ("notes.txt", b"hello", "text/plain")},
+    )
+    assert unsupported.status_code == 415
+    assert unsupported.json()["success"] is False
+    assert unsupported.json()["error"]["code"] == "UNSUPPORTED_FILE"
+
+    fake_xlsx = client.post(
+        "/api/v1/excel/inspect",
+        files={"files": ("fake.xlsx", b"not a zip", "application/octet-stream")},
+    )
+    assert fake_xlsx.status_code == 400
+    assert fake_xlsx.json()["error"]["code"] == "INVALID_FILE_TYPE"
+
+
+def test_expired_upload_is_removed(client: TestClient, test_settings):
+    upload = upload_files(client, [("清单.csv", make_csv_bytes(), "text/csv")])
+    storage = TempStorage(test_settings)
+    removed = storage.cleanup_expired(now=datetime.now(UTC) + timedelta(hours=1))
+    assert removed >= 1
+    response = client.post(
+        "/api/v1/excel/split",
+        json={
+            "upload_id": upload["upload_id"],
+            "mode": "by_sheet",
+            "sheets": sheet_refs(upload),
+        },
+    )
+    assert response.status_code in {404, 410}
+
