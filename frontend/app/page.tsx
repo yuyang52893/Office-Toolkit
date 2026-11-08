@@ -1,236 +1,201 @@
 import {
   ArrowRight,
-  Check,
-  Columns3,
-  FileSpreadsheet,
   Files,
   Layers3,
+  Network,
   QrCode,
-  Rows3,
   ScanLine,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 
-const excelFeatures = [
-  { icon: Layers3, label: "按工作表拆分" },
-  { icon: Rows3, label: "按行数拆分" },
-  { icon: Columns3, label: "按列值拆分" },
-  { icon: Files, label: "多表合并" },
+type ToolAction = {
+  title: string;
+  description: string;
+  href: string;
+  icon: typeof Layers3;
+  label: string;
+  tags: string[];
+  iconClass: string;
+  accentClass: string;
+};
+
+const spreadsheetActions: ToolAction[] = [
+  {
+    title: "拆分 Excel / CSV",
+    description: "把一个文件按工作表、固定行数或指定列拆成多个文件。",
+    href: "/excel?mode=by_sheet",
+    icon: Layers3,
+    label: "SPLIT",
+    tags: ["按工作表", "按行数", "按列值"],
+    iconClass: "bg-blue-600 text-white shadow-blue-600/20",
+    accentClass: "bg-blue-100/70",
+  },
+  {
+    title: "合并多个表格",
+    description: "把多个 Excel、XLS 或 CSV 的数据按行追加到一个结果文件。",
+    href: "/excel?mode=merge",
+    icon: Files,
+    label: "MERGE",
+    tags: ["批量上传", "表头对齐", "清理数据"],
+    iconClass: "bg-slate-950 text-white shadow-slate-900/15",
+    accentClass: "bg-sky-100/70",
+  },
 ];
+
+const qrActions: ToolAction[] = [
+  {
+    title: "生成二维码",
+    description: "把文本或链接生成自定义尺寸的 PNG 二维码。",
+    href: "/qrcode?tab=generate",
+    icon: QrCode,
+    label: "CREATE",
+    tags: ["自定义尺寸", "PNG"],
+    iconClass: "bg-indigo-600 text-white shadow-indigo-600/20",
+    accentClass: "bg-indigo-100/70",
+  },
+  {
+    title: "解析二维码图片",
+    description: "上传截图或照片，识别图片中的所有二维码内容。",
+    href: "/qrcode?tab=decode",
+    icon: ScanLine,
+    label: "SCAN",
+    tags: ["多码识别", "PNG / JPG"],
+    iconClass: "bg-cyan-600 text-white shadow-cyan-600/20",
+    accentClass: "bg-cyan-100/70",
+  },
+  {
+    title: "制作 MAC 地址二维码",
+    description: "规范化已有 MAC 地址，并生成可直接下载的二维码。",
+    href: "/qrcode?tab=mac",
+    icon: Network,
+    label: "MAC",
+    tags: ["格式转换", "地址校验"],
+    iconClass: "bg-emerald-600 text-white shadow-emerald-600/20",
+    accentClass: "bg-emerald-100/70",
+  },
+];
+
+function ToolCard({ action, compact = false }: { action: ToolAction; compact?: boolean }) {
+  const Icon = action.icon;
+  return (
+    <Link
+      href={action.href}
+      className={`surface-card group relative overflow-hidden rounded-[24px] p-5 transition duration-200 hover:-translate-y-1 hover:border-blue-200 hover:shadow-xl hover:shadow-slate-900/8 sm:p-6 ${
+        compact ? "min-h-56" : "min-h-64"
+      }`}
+    >
+      <span
+        className={`absolute -right-14 -top-14 size-40 rounded-full transition duration-300 group-hover:scale-125 ${action.accentClass}`}
+      />
+      <div className="relative flex h-full flex-col">
+        <div className="flex items-start justify-between">
+          <span
+            className={`grid place-items-center rounded-2xl shadow-lg ${action.iconClass} ${
+              compact ? "size-12" : "size-14"
+            }`}
+          >
+            <Icon size={compact ? 23 : 27} />
+          </span>
+          <span className="text-[10px] font-black tracking-[0.18em] text-slate-400">
+            {action.label}
+          </span>
+        </div>
+        <h3 className="mt-5 text-xl font-black tracking-tight text-slate-950 sm:text-2xl">
+          {action.title}
+        </h3>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{action.description}</p>
+        <div className="mt-auto flex items-end justify-between gap-3 pt-5">
+          <div className="flex flex-wrap gap-1.5">
+            {action.tags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-md border border-slate-200/80 bg-white/80 px-2 py-1 text-[10px] font-semibold text-slate-500"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-blue-600">
+            开始使用
+            <ArrowRight size={14} className="transition group-hover:translate-x-1" />
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
+}
 
 export default function HomePage() {
   return (
-    <>
-      <section className="relative overflow-hidden">
-        <div className="subtle-grid absolute inset-0 opacity-70 [mask-image:linear-gradient(to_bottom,black,transparent_82%)]" />
-        <div className="relative mx-auto grid max-w-6xl gap-12 px-4 pb-20 pt-16 sm:px-6 sm:pt-24 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:pb-28">
-          <div className="fade-up">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50/80 px-3 py-1.5 text-xs font-semibold text-blue-700">
-              <Sparkles size={14} />
-              免登录 · 文件自动清理
-            </div>
-            <h1 className="max-w-2xl text-4xl font-black leading-[1.13] tracking-[-0.045em] text-slate-950 sm:text-6xl">
-              把繁琐的表格，
-              <span className="relative mx-2 inline-block text-blue-600">
-                变成几步操作
-                <span className="absolute -bottom-1 left-0 h-2 w-full rounded-full bg-blue-100/90" />
-              </span>
-            </h1>
-            <p className="mt-6 max-w-xl text-base leading-8 text-slate-600 sm:text-lg">
-              在线拆分、合并 Excel / XLS / CSV，生成和解析二维码。
-              常用办公小工具集中在一个清爽页面里。
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                href="/excel"
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:-translate-y-0.5 hover:bg-blue-700"
-              >
-                <FileSpreadsheet size={18} />
-                处理表格
-                <ArrowRight size={16} />
-              </Link>
-              <Link
-                href="/qrcode"
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700"
-              >
-                <QrCode size={18} />
-                二维码与 MAC
-              </Link>
-            </div>
-            <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-500">
-              <span className="inline-flex items-center gap-1.5">
-                <Check size={14} className="text-emerald-600" />
-                支持 xlsx / xls / csv
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Check size={14} className="text-emerald-600" />
-                批量处理
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Check size={14} className="text-emerald-600" />
-                30 分钟自动删除
-              </span>
-            </div>
-          </div>
-
-          <div className="fade-up relative mx-auto w-full max-w-lg lg:mx-0" style={{ animationDelay: "80ms" }}>
-            <div className="absolute -left-5 top-16 size-24 rounded-full bg-blue-300/25 blur-2xl" />
-            <div className="absolute -right-3 bottom-4 size-32 rounded-full bg-cyan-300/20 blur-3xl" />
-            <div className="surface-card relative rotate-[1.4deg] rounded-[28px] p-5 sm:p-7">
-              <div className="mb-5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
-                    Excel Split
-                  </p>
-                  <p className="mt-1 text-lg font-bold text-slate-900">销售数据.xlsx</p>
-                </div>
-                <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                  处理完成
-                </span>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                <div className="flex items-center gap-3">
-                  <span className="grid size-11 place-items-center rounded-xl bg-emerald-100 text-emerald-700">
-                    <FileSpreadsheet size={22} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-4 text-xs font-semibold text-slate-700">
-                      <span>销售数据_拆分结果.zip</span>
-                      <span className="text-slate-400">6 个文件</span>
-                    </div>
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
-                      <div className="h-full w-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                {["华东区.xlsx", "华南区.xlsx", "华北区.xlsx", "西南区.xlsx"].map(
-                  (name, index) => (
-                    <div
-                      key={name}
-                      className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-600"
-                      style={{ transform: `translateY(${index % 2 ? 5 : 0}px)` }}
-                    >
-                      <span className="grid size-7 place-items-center rounded-lg bg-blue-50 text-blue-600">
-                        <FileSpreadsheet size={14} />
-                      </span>
-                      {name}
-                    </div>
-                  ),
-                )}
-              </div>
-              <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-950 px-4 py-3 text-xs text-slate-300">
-                <span className="inline-flex items-center gap-2">
-                  <ShieldCheck size={15} className="text-emerald-400" />
-                  临时文件将在 29:42 后清理
-                </span>
-                <span className="font-bold text-white">下载 ZIP</span>
-              </div>
-            </div>
+    <div className="relative overflow-hidden">
+      <div className="subtle-grid absolute inset-x-0 top-0 h-[34rem] opacity-65 [mask-image:linear-gradient(to_bottom,black,transparent)]" />
+      <section className="relative mx-auto max-w-6xl px-4 pb-10 pt-12 sm:px-6 sm:pt-16">
+        <div className="fade-up text-center">
+          <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white/80 px-3.5 py-1.5 text-xs font-bold text-blue-700 shadow-sm">
+            <Sparkles size={14} />
+            欢迎使用轻办公工具箱
+          </span>
+          <h1 className="mx-auto mt-5 max-w-3xl text-4xl font-black tracking-[-0.045em] text-slate-950 sm:text-5xl">
+            今天想处理什么？
+          </h1>
+          <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">
+            先选择一个具体功能，再进入对应工作台。
+            参数已经为你简化，按页面提示操作即可。
+          </p>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[11px] text-slate-500">
+            <span className="inline-flex items-center gap-1.5">
+              <ShieldCheck size={13} className="text-emerald-600" />
+              免登录
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Sparkles size={13} className="text-blue-600" />
+              数据仅作演示
+            </span>
+            <span>支持 xlsx / xls / csv</span>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 pb-20 sm:px-6 sm:pb-28">
-        <div className="mb-8 flex items-end justify-between gap-5">
+      <section className="relative mx-auto max-w-6xl px-4 pb-16 sm:px-6 sm:pb-24">
+        <div className="mb-4 flex items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
-              Tools
-            </p>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
-              选择你要处理的内容
+            <p className="text-[10px] font-black tracking-[0.2em] text-blue-600">SPREADSHEET</p>
+            <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">表格处理</h2>
+          </div>
+          <p className="hidden text-xs text-slate-500 sm:block">拆分与合并，进入后先上传文件</p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {spreadsheetActions.map((action) => (
+            <ToolCard key={action.title} action={action} />
+          ))}
+        </div>
+
+        <div className="mb-4 mt-9 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-black tracking-[0.2em] text-blue-600">QR & MAC</p>
+            <h2 className="mt-1 text-xl font-black tracking-tight text-slate-950">
+              二维码与 MAC
             </h2>
           </div>
-          <p className="hidden max-w-sm text-right text-sm leading-6 text-slate-500 sm:block">
-            一次上传，批量处理。结果保留 30 分钟，方便重复下载。
-          </p>
+          <p className="hidden text-xs text-slate-500 sm:block">生成、识别或转换地址格式</p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          {qrActions.map((action) => (
+            <ToolCard key={action.title} action={action} compact />
+          ))}
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2">
-          <Link
-            href="/excel"
-            className="surface-card group relative overflow-hidden rounded-[26px] p-6 transition hover:-translate-y-1 hover:border-blue-200 sm:p-8"
-          >
-            <div className="absolute -right-14 -top-14 size-44 rounded-full bg-blue-100/60 transition group-hover:scale-110" />
-            <div className="relative">
-              <div className="flex items-start justify-between">
-                <span className="grid size-14 place-items-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
-                  <FileSpreadsheet size={28} />
-                </span>
-                <span className="inline-flex items-center gap-1 text-sm font-bold text-blue-600">
-                  进入工作台
-                  <ArrowRight size={16} className="transition group-hover:translate-x-1" />
-                </span>
-              </div>
-              <h3 className="mt-7 text-2xl font-black tracking-tight text-slate-950">
-                Excel / CSV 工作台
-              </h3>
-              <p className="mt-3 text-sm leading-7 text-slate-600">
-                多 Sheet 拆分、按行数、按列值拆分，以及多文件数据合并。
-                支持去除空行和重复行。
-              </p>
-              <div className="mt-6 grid grid-cols-2 gap-2">
-                {excelFeatures.map(({ icon: Icon, label }) => (
-                  <span
-                    key={label}
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-2.5 text-xs font-semibold text-slate-600"
-                  >
-                    <Icon size={15} className="text-blue-600" />
-                    {label}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </Link>
-
-          <Link
-            href="/qrcode"
-            className="surface-card group relative overflow-hidden rounded-[26px] p-6 transition hover:-translate-y-1 hover:border-blue-200 sm:p-8"
-          >
-            <div className="absolute -right-14 -top-14 size-44 rounded-full bg-cyan-100/60 transition group-hover:scale-110" />
-            <div className="relative">
-              <div className="flex items-start justify-between">
-                <span className="grid size-14 place-items-center rounded-2xl bg-slate-950 text-white shadow-lg shadow-slate-900/15">
-                  <QrCode size={29} />
-                </span>
-                <span className="inline-flex items-center gap-1 text-sm font-bold text-blue-600">
-                  开始使用
-                  <ArrowRight size={16} className="transition group-hover:translate-x-1" />
-                </span>
-              </div>
-              <h3 className="mt-7 text-2xl font-black tracking-tight text-slate-950">
-                二维码 / MAC 工具
-              </h3>
-              <p className="mt-3 text-sm leading-7 text-slate-600">
-                文本转二维码、自定义尺寸、上传图片解析内容。
-                MAC 地址支持常见格式识别与规范化。
-              </p>
-              <div className="mt-6 grid grid-cols-2 gap-2">
-                <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-2.5 text-xs font-semibold text-slate-600">
-                  <QrCode size={15} className="text-blue-600" />
-                  生成 PNG
-                </span>
-                <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-2.5 text-xs font-semibold text-slate-600">
-                  <ScanLine size={15} className="text-blue-600" />
-                  图片识别
-                </span>
-                <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-2.5 text-xs font-semibold text-slate-600">
-                  <Sparkles size={15} className="text-blue-600" />
-                  MAC 规范化
-                </span>
-                <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-2.5 text-xs font-semibold text-slate-600">
-                  <ShieldCheck size={15} className="text-blue-600" />
-                  多码识别
-                </span>
-              </div>
-            </div>
-          </Link>
+        <div className="mt-8 flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white/60 px-4 py-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <span className="inline-flex items-center gap-2">
+            <ShieldCheck size={15} className="text-emerald-600" />
+            当前为演示模式，不会上传或保存真实文件
+          </span>
+          <span>界面与流程用于评审，后续可切换真实后端</span>
         </div>
       </section>
-    </>
+    </div>
   );
 }
 

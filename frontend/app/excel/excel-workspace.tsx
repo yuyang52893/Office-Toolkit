@@ -24,6 +24,7 @@ import { useMemo, useRef, useState } from "react";
 
 import { StatusBanner } from "@/components/status-banner";
 import { Toggle } from "@/components/toggle";
+import { BackToTools } from "@/components/back-to-tools";
 import {
   getErrorMessage,
   formatBytes,
@@ -87,12 +88,12 @@ const maxFiles = 20;
 const maxFileBytes = 50 * 1024 * 1024;
 const maxTaskBytes = 100 * 1024 * 1024;
 
-export function ExcelWorkspace() {
+export function ExcelWorkspace({ initialMode = "by_sheet" }: { initialMode?: ExcelMode }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [upload, setUpload] = useState<ExcelUpload | null>(null);
   const [selected, setSelected] = useState<SelectionMap>({});
-  const [mode, setMode] = useState<ExcelMode>("by_sheet");
+  const [mode, setMode] = useState<ExcelMode>(initialMode);
   const [hasHeader, setHasHeader] = useState(true);
   const [removeEmptyRows, setRemoveEmptyRows] = useState(false);
   const [removeDuplicates, setRemoveDuplicates] = useState(false);
@@ -335,6 +336,9 @@ export function ExcelWorkspace() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+      <div className="mb-5">
+        <BackToTools />
+      </div>
       <section className="fade-up mb-8">
         <div className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
           <FileSpreadsheet size={15} />
@@ -599,6 +603,7 @@ export function ExcelWorkspace() {
                   <button
                     key={id}
                     type="button"
+                    aria-pressed={active}
                     onClick={() => {
                       setMode(id);
                       setResult(null);

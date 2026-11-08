@@ -1,4 +1,4 @@
-import { FileSpreadsheet, QrCode } from "lucide-react";
+import { FileSpreadsheet, LayoutGrid } from "lucide-react";
 import Link from "next/link";
 
 export function SiteHeader() {
@@ -19,23 +19,13 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        <nav className="flex items-center gap-1 text-sm">
-          <Link
-            href="/excel"
-            className="flex items-center gap-2 rounded-lg px-3 py-2 font-medium text-slate-600 transition hover:bg-blue-50 hover:text-blue-700"
-          >
-            <FileSpreadsheet size={16} />
-            <span className="hidden sm:inline">Excel / CSV</span>
-            <span className="sm:hidden">表格</span>
-          </Link>
-          <Link
-            href="/qrcode"
-            className="flex items-center gap-2 rounded-lg px-3 py-2 font-medium text-slate-600 transition hover:bg-blue-50 hover:text-blue-700"
-          >
-            <QrCode size={16} />
-            <span>二维码</span>
-          </Link>
-        </nav>
+        <Link
+          href="/"
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-blue-50 hover:text-blue-700"
+        >
+          <LayoutGrid size={16} />
+          功能选择
+        </Link>
       </div>
     </header>
   );

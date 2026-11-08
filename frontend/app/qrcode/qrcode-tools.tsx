@@ -20,6 +20,7 @@ import type { ChangeEvent, DragEvent, KeyboardEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { StatusBanner } from "@/components/status-banner";
+import { BackToTools } from "@/components/back-to-tools";
 import { decodeQrCode, generateQrCode } from "@/lib/api";
 import { formatBytes, getErrorMessage } from "@/lib/format";
 import type { QrDecodedItem } from "@/lib/types";
@@ -27,8 +28,8 @@ import { MacAddressTool } from "./mac-address-tool";
 
 type Tab = "generate" | "decode" | "mac";
 
-export function QrCodeTools() {
-  const [tab, setTab] = useState<Tab>("generate");
+export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [content, setContent] = useState("https://example.com");
   const [size, setSize] = useState(512);
   const [generating, setGenerating] = useState(false);
@@ -181,6 +182,9 @@ export function QrCodeTools() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+      <div className="mb-5">
+        <BackToTools />
+      </div>
       <section className="fade-up mb-8">
         <div className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
           <QrCode size={15} />

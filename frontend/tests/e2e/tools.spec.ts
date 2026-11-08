@@ -11,9 +11,54 @@ test.beforeEach(({ page }) => {
   });
 });
 
-test("首页明确标识演示模式", async ({ page }) => {
+test("首页明确展示欢迎语和五个功能入口", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("演示模式 · 数据为模拟")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "今天想处理什么？" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /拆分 Excel \/ CSV/ })).toHaveAttribute(
+    "href",
+    "/excel?mode=by_sheet",
+  );
+  await expect(page.getByRole("link", { name: /合并多个表格/ })).toHaveAttribute(
+    "href",
+    "/excel?mode=merge",
+  );
+  await expect(page.getByRole("link", { name: /生成二维码/ })).toHaveAttribute(
+    "href",
+    "/qrcode?tab=generate",
+  );
+  await expect(page.getByRole("link", { name: /解析二维码图片/ })).toHaveAttribute(
+    "href",
+    "/qrcode?tab=decode",
+  );
+  await expect(page.getByRole("link", { name: /制作 MAC 地址二维码/ })).toHaveAttribute(
+    "href",
+    "/qrcode?tab=mac",
+  );
+  await expect(page.getByRole("link", { name: "功能选择" })).toBeVisible();
+});
+
+test("首页入口会预选对应处理模式", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: /合并多个表格/ }).click();
+  await expect(page).toHaveURL(/\/excel\?mode=merge$/);
+  await expect(page.getByRole("link", { name: "返回功能选择" })).toBeVisible();
+
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "合并数据.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("地区,金额\n华东,100\n华南,200\n", "utf8"),
+  });
+  await page.getByRole("button", { name: "读取工作表" }).click();
+  await expect(page.getByRole("button", { name: /^合并数据/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await page.goto("/");
+  await page.getByRole("link", { name: /制作 MAC 地址二维码/ }).click();
+  await expect(page).toHaveURL(/\/qrcode\?tab=mac$/);
+  await expect(page.getByRole("heading", { name: "MAC 地址工具" })).toBeVisible();
 });
 
 test("Excel/CSV 按行数拆分并下载 ZIP", async ({ page }) => {
