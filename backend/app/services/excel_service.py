@@ -146,7 +146,7 @@ class ExcelService:
             with tempfile.TemporaryDirectory(dir=str(self.storage.root)) as temp_name:
                 scratch = Path(temp_name)
                 output_path = scratch / self._result_name("合并结果", ".xlsx")
-                output_count = self._write_merge(
+                row_count = self._write_merge(
                     upload,
                     selected,
                     request,
@@ -158,7 +158,7 @@ class ExcelService:
                     output_path.name,
                     lambda target: shutil.copyfile(output_path, target),
                 )
-        return self._public_result(metadata, output_count)
+        return self._public_result(metadata, 1, row_count=row_count)
 
     def _run_split(
         self,
@@ -623,8 +623,12 @@ class ExcelService:
         return f"{prefix}_{timestamp}{suffix}"
 
     @staticmethod
-    def _public_result(metadata: dict[str, Any], output_count: int) -> dict[str, Any]:
-        return {
+    def _public_result(
+        metadata: dict[str, Any],
+        output_count: int,
+        row_count: int | None = None,
+    ) -> dict[str, Any]:
+        result = {
             "result_id": metadata["result_id"],
             "filename": metadata["filename"],
             "size": metadata["size"],
@@ -632,6 +636,9 @@ class ExcelService:
             "download_url": f"/api/v1/results/{metadata['result_id']}",
             "output_count": output_count,
         }
+        if row_count is not None:
+            result["row_count"] = row_count
+        return result
 
     @staticmethod
     def _check_deadline(deadline: float) -> None:

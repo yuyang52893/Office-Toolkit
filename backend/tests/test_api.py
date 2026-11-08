@@ -187,6 +187,8 @@ def test_merge_strict_and_by_name(client: TestClient):
         },
     )
     assert merged.status_code == 200, merged.text
+    assert merged.json()["data"]["output_count"] == 1
+    assert merged.json()["data"]["row_count"] == 5
     download = client.get(merged.json()["data"]["download_url"])
     rows = read_xlsx_rows(download.content)["合并结果"]
     assert rows[0] == ["地区", "金额", "备注", "商品", "数量"]
