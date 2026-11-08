@@ -66,5 +66,8 @@ docker compose up --build
 
 访问 `http://localhost:8080`。
 
-详细产品规则与验收标准见 [docs/MVP_SPEC.md](docs/MVP_SPEC.md)。
+## 项目文档
+
+- [产品设计文档](docs/PRODUCT_DESIGN.md)：产品定位、功能规则、路线图和验收标准。
+- [工程化指南](docs/ENGINEERING_GUIDE.md)：技术栈、目录分层、API、测试和开发规范。
 
