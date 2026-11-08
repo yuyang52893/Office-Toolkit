@@ -4,6 +4,7 @@ frontend/.next/
 frontend/playwright-report/
 frontend/test-results/
 frontend/.env.local
+frontend/tsconfig.tsbuildinfo
 
 # Backend
 backend/.venv/

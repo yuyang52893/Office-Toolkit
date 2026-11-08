@@ -10,6 +10,24 @@
 
 ## 本地开发
 
+### 页面演示模式
+
+```powershell
+cd frontend
+pnpm install
+pnpm dev
+```
+
+默认使用纯前端模拟数据，打开 `http://localhost:3000` 即可评审页面和操作流程，无需启动后端。二维码会真实生成；Excel 处理和二维码解析使用模拟结果。
+
+需要连接真实接口时，在 `frontend/.env.local` 设置：
+
+```text
+NEXT_PUBLIC_DEMO_MODE=false
+```
+
+### 完整前后端
+
 ```powershell
 cd backend
 uv sync --dev
