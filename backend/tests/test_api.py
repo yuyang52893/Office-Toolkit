@@ -24,6 +24,26 @@ def test_health_and_request_id(client: TestClient):
     assert body["error"] is None
 
 
+def test_unknown_routes_and_methods_use_unified_error_contract(client: TestClient):
+    missing = client.get("/api/v1/does-not-exist")
+    assert missing.status_code == 404
+    assert missing.json() == {
+        "success": False,
+        "data": None,
+        "error": {
+            "code": "NOT_FOUND",
+            "message": "请求的接口不存在",
+            "details": None,
+        },
+        "request_id": missing.headers["X-Request-ID"],
+    }
+
+    wrong_method = client.post("/api/v1/health")
+    assert wrong_method.status_code == 405
+    assert wrong_method.json()["success"] is False
+    assert wrong_method.json()["error"]["code"] == "METHOD_NOT_ALLOWED"
+
+
 def test_inspect_xlsx_xls_and_csv(client: TestClient):
     upload = upload_files(
         client,
@@ -47,6 +67,15 @@ def test_inspect_xlsx_xls_and_csv(client: TestClient):
     assert upload["files"][1]["sheets"][0]["headers"] == ["姓名", "部门"]
     assert upload["files"][2]["format"] == "csv"
     assert upload["files"][2]["sheets"][0]["headers"] == ["名称", "数量"]
+
+
+def test_inspect_rejects_mime_type_that_contradicts_extension(client: TestClient):
+    response = client.post(
+        "/api/v1/excel/inspect",
+        files=[("files", ("清单.csv", make_csv_bytes(), "image/png"))],
+    )
+    assert response.status_code == 415
+    assert response.json()["error"]["code"] == "FILE_TYPE_MISMATCH"
 
 
 def test_split_by_sheet_creates_single_sheet_files(client: TestClient):

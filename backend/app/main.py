@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.common.errors import AppError
 from app.common.logging import configure_logging
@@ -96,6 +97,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             message="请求参数不正确",
             status_code=422,
             details=details,
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error_handler(request: Request, exc: StarletteHTTPException):
+        messages = {
+            404: ("NOT_FOUND", "请求的接口不存在"),
+            405: ("METHOD_NOT_ALLOWED", "请求方法不被允许"),
+        }
+        code, message = messages.get(exc.status_code, ("HTTP_ERROR", "请求未完成"))
+        return error_response(
+            request,
+            code=code,
+            message=message,
+            status_code=exc.status_code,
+            headers=exc.headers,
         )
 
     @app.exception_handler(Exception)

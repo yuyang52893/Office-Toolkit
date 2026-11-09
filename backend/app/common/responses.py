@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from typing import Any
 
 from fastapi import Request
@@ -32,6 +33,7 @@ def error_response(
     message: str,
     status_code: int,
     details: Any = None,
+    headers: Mapping[str, str] | None = None,
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
@@ -45,5 +47,6 @@ def error_response(
             },
             "request_id": _request_id(request),
         },
+        headers=headers,
     )
 

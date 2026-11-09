@@ -22,6 +22,24 @@ from app.services.excel_reader import SUPPORTED_SUFFIXES, CellValue, ExcelReader
 
 _UNSAFE_FILENAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _WHITESPACE = re.compile(r"\s+")
+_ALLOWED_CONTENT_TYPES = {
+    ".xlsx": {
+        "application/octet-stream",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/zip",
+    },
+    ".xls": {
+        "application/octet-stream",
+        "application/vnd.ms-excel",
+    },
+    ".csv": {
+        "application/csv",
+        "application/octet-stream",
+        "application/vnd.ms-excel",
+        "text/csv",
+        "text/plain",
+    },
+}
 
 
 class ExcelService:
@@ -56,6 +74,19 @@ class ExcelService:
                             "仅支持 xlsx、xls 和 csv 文件",
                             status_code=415,
                             details={"filename": original_name or "未命名文件"},
+                        )
+                    content_type = (
+                        str(getattr(upload, "content_type", "") or "")
+                        .split(";", 1)[0]
+                        .strip()
+                        .lower()
+                    )
+                    if content_type and content_type not in _ALLOWED_CONTENT_TYPES[suffix]:
+                        raise AppError(
+                            "FILE_TYPE_MISMATCH",
+                            "文件扩展名与文件类型不一致，请选择正确的文件",
+                            status_code=415,
+                            details={"filename": original_name, "content_type": content_type},
                         )
                     stored_name, path, size = self.storage.write_upload(
                         upload_dir,
