@@ -532,91 +532,97 @@ export function ExcelWorkspace({ initialMode = "by_sheet" }: { initialMode?: Exc
 
         {upload ? (
           <section className="surface-card fade-up rounded-2xl p-5 sm:p-7">
-            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-black tracking-tight text-slate-950">选择工作表</h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  已选择 {selectedRefs.length} / {allSheets.length} 个工作表
-                </p>
+            <fieldset disabled={busy} className="m-0 min-w-0 border-0 p-0">
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-black tracking-tight text-slate-950">选择工作表</h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    已选择 {selectedRefs.length} / {allSheets.length} 个工作表
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleAllSheets}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:border-blue-200 hover:text-blue-700"
+                >
+                  {selectedRefs.length === allSheets.length ? "取消全选" : "全选工作表"}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={toggleAllSheets}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:border-blue-200 hover:text-blue-700"
-              >
-                {selectedRefs.length === allSheets.length ? "取消全选" : "全选工作表"}
-              </button>
-            </div>
 
-            <div className="space-y-4">
-              {upload.files.map((file) => (
-                <div key={file.file_id} className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
-                  <div className="mb-3 flex items-center gap-2.5">
-                    <span className="grid size-8 place-items-center rounded-lg bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200">
-                      <FileSpreadsheet size={15} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold text-slate-800">{file.name}</p>
-                      <p className="text-[10px] text-slate-400">{formatBytes(file.size)}</p>
+              <div className="space-y-4">
+                {upload.files.map((file) => (
+                  <div
+                    key={file.file_id}
+                    className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5"
+                  >
+                    <div className="mb-3 flex items-center gap-2.5">
+                      <span className="grid size-8 place-items-center rounded-lg bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200">
+                        <FileSpreadsheet size={15} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-bold text-slate-800">{file.name}</p>
+                        <p className="text-[10px] text-slate-400">{formatBytes(file.size)}</p>
+                      </div>
+                      <span className="rounded-md bg-white px-2 py-1 text-[10px] font-black uppercase text-slate-500 ring-1 ring-slate-200">
+                        {file.format}
+                      </span>
                     </div>
-                    <span className="rounded-md bg-white px-2 py-1 text-[10px] font-black uppercase text-slate-500 ring-1 ring-slate-200">
-                      {file.format}
-                    </span>
-                  </div>
-                  <div className="grid gap-2 lg:grid-cols-2">
-                    {file.sheets.map((sheet) => {
-                      const checked = (selected[file.file_id] ?? []).includes(sheet.sheet_index);
-                      return (
-                        <label
-                          key={sheet.sheet_index}
-                          className={`flex items-start gap-3 rounded-xl border p-3 transition ${
-                            checked
-                              ? "border-blue-200 bg-white shadow-sm"
-                              : "border-slate-200 bg-white/50 hover:border-slate-300"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleSheet(file.file_id, sheet.sheet_index)}
-                            className="sr-only"
-                          />
-                          <span
-                            className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border ${
+                    <div className="grid gap-2 lg:grid-cols-2">
+                      {file.sheets.map((sheet) => {
+                        const checked = (selected[file.file_id] ?? []).includes(sheet.sheet_index);
+                        return (
+                          <label
+                            key={sheet.sheet_index}
+                            className={`flex items-start gap-3 rounded-xl border p-3 transition ${
                               checked
-                                ? "border-blue-600 bg-blue-600 text-white"
-                                : "border-slate-300 bg-white text-transparent"
+                                ? "border-blue-200 bg-white shadow-sm"
+                                : "border-slate-200 bg-white/50 hover:border-slate-300"
                             }`}
                           >
-                            <Check size={13} strokeWidth={3} />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold text-slate-800">
-                              {sheet.name}
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleSheet(file.file_id, sheet.sheet_index)}
+                              className="sr-only"
+                            />
+                            <span
+                              className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border ${
+                                checked
+                                  ? "border-blue-600 bg-blue-600 text-white"
+                                  : "border-slate-300 bg-white text-transparent"
+                              }`}
+                            >
+                              <Check size={13} strokeWidth={3} />
                             </span>
-                            <span className="mt-1 block text-[11px] text-slate-500">
-                              {sheet.row_count.toLocaleString("zh-CN")} 行 · {sheet.column_count} 列
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-semibold text-slate-800">
+                                {sheet.name}
+                              </span>
+                              <span className="mt-1 block text-[11px] text-slate-500">
+                                {sheet.row_count.toLocaleString("zh-CN")} 行 · {sheet.column_count} 列
+                              </span>
+                              <span className="mt-1 block truncate text-[10px] text-slate-400">
+                                {sheet.headers.join(" / ") || "无表头"}
+                              </span>
                             </span>
-                            <span className="mt-1 block truncate text-[10px] text-slate-400">
-                              {sheet.headers.join(" / ") || "无表头"}
-                            </span>
-                          </span>
-                        </label>
-                      );
-                    })}
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </fieldset>
           </section>
         ) : null}
 
         {upload ? (
           <section className="surface-card fade-up rounded-2xl p-5 sm:p-7">
-            <div className="mb-5">
+            <fieldset disabled={busy} className="m-0 min-w-0 border-0 p-0">
+              <div className="mb-5">
               <h2 className="text-lg font-black tracking-tight text-slate-950">处理规则</h2>
               <p className="mt-1 text-xs text-slate-500">选择一种处理方式并设置规则</p>
-            </div>
+              </div>
 
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {operations.map(({ id, label, description, icon: Icon }) => {
@@ -787,6 +793,7 @@ export function ExcelWorkspace({ initialMode = "by_sheet" }: { initialMode?: Exc
                     : "开始拆分"}
               </button>
             </div>
+            </fieldset>
           </section>
         ) : null}
 

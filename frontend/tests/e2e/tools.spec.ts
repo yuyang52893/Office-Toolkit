@@ -79,6 +79,8 @@ test("Excel/CSV 按行数拆分并下载 ZIP", async ({ page }) => {
   await page.getByRole("button", { name: /按行数/ }).click();
   await page.getByRole("spinbutton").fill("2");
   await page.getByRole("button", { name: "开始拆分" }).click();
+  await expect(page.getByRole("button", { name: /合并数据/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "取消全选" })).toBeDisabled();
   await expect(page.getByRole("heading", { name: "拆分完成" })).toBeVisible();
 
   const downloadPromise = page.waitForEvent("download");
@@ -89,9 +91,12 @@ test("Excel/CSV 按行数拆分并下载 ZIP", async ({ page }) => {
 
 test("二维码生成并下载 PNG", async ({ page }) => {
   await page.goto("/qrcode");
-  await page.getByRole("textbox").fill("轻办公工具箱 https://example.com");
+  const content = page.getByRole("textbox");
+  await content.fill("轻办公工具箱 https://example.com");
   await page.getByRole("button", { name: "立即生成" }).click();
+  await expect(content).toBeDisabled();
   await expect(page.getByAltText("生成的二维码")).toBeVisible();
+  await expect(content).toBeEnabled();
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("link", { name: "下载 PNG" }).click();
@@ -108,15 +113,23 @@ test("上传二维码图片并解析 MAC 地址", async ({ page }) => {
     buffer: demoPng,
   });
   await page.getByRole("button", { name: "开始识别" }).click();
+  await expect(page.getByRole("button", { name: "移除图片" })).toBeDisabled();
   await expect(page.getByText("轻办公工具箱演示内容").first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "移除图片" })).toBeEnabled();
 });
 
 test("MAC 页签规范化已有地址并生成二维码", async ({ page }) => {
   await page.goto("/qrcode");
   await page.getByRole("button", { name: "MAC 地址", exact: true }).click();
-  await page.getByLabel("已有 MAC 地址").fill("aa-bb-cc-dd-ee-ff");
+  const input = page.getByLabel("已有 MAC 地址");
+  await input.fill("aa-bb-cc-dd-ee-ff");
   await expect(page.getByText("AA:BB:CC:DD:EE:FF").first()).toBeVisible();
   await page.getByRole("button", { name: "生成 MAC 二维码" }).click();
+  await expect(input).toBeDisabled();
   await expect(page.getByAltText("MAC 地址二维码")).toBeVisible();
+  await expect(input).toBeEnabled();
+
+  await input.fill("11:22:33:44:55:66");
+  await expect(page.getByAltText("MAC 地址二维码")).toHaveCount(0);
 });
 

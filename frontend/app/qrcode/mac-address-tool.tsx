@@ -83,8 +83,10 @@ export function MacAddressTool() {
           <span className="text-sm font-semibold text-slate-800">已有 MAC 地址</span>
           <input
             value={value}
+            disabled={generating}
             onChange={(event) => {
               setValue(event.target.value);
+              updatePreview(null);
               setError("");
             }}
             placeholder="例如 AA:BB:CC:DD:EE:FF"

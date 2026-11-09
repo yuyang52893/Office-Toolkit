@@ -95,6 +95,9 @@ export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
   }
 
   function acceptDecodeFile(file: File) {
+    if (decoding) {
+      return;
+    }
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
       setDecodeError("仅支持 PNG、JPEG 和 WebP 图片");
       return;
@@ -116,7 +119,7 @@ export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
 
   function handleDecodeInput(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (file) {
+    if (file && !decoding) {
       acceptDecodeFile(file);
     }
     event.target.value = "";
@@ -125,6 +128,9 @@ export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
   function handleDecodeDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setIsDragging(false);
+    if (decoding) {
+      return;
+    }
     const file = event.dataTransfer.files?.[0];
     if (file) {
       acceptDecodeFile(file);
@@ -132,6 +138,9 @@ export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
   }
 
   function handleDecodeKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (decoding) {
+      return;
+    }
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       decodeInputRef.current?.click();
@@ -262,6 +271,7 @@ export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
               <span className="text-sm font-semibold text-slate-800">内容</span>
               <textarea
                 value={content}
+                disabled={generating}
                 onChange={(event) => {
                   setContent(event.target.value);
                   markGenerateDirty();
@@ -293,6 +303,7 @@ export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
                   max={2048}
                   step={32}
                   value={size}
+                  disabled={generating}
                   onChange={(event) => {
                     setSize(Number(event.target.value));
                     markGenerateDirty();
@@ -304,6 +315,7 @@ export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
                   min={128}
                   max={2048}
                   value={size}
+                  disabled={generating}
                   onChange={(event) => {
                     const next = Number(event.target.value);
                     setSize(Number.isFinite(next) ? Math.min(2048, Math.max(128, next)) : 512);
@@ -398,9 +410,10 @@ export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
             />
             <div
               role="button"
-              tabIndex={0}
+              tabIndex={decoding ? -1 : 0}
               aria-label="选择二维码图片"
-              onClick={() => decodeInputRef.current?.click()}
+              aria-disabled={decoding}
+              onClick={() => !decoding && decodeInputRef.current?.click()}
               onKeyDown={handleDecodeKeyDown}
               onDragOver={(event) => {
                 event.preventDefault();
@@ -427,6 +440,7 @@ export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
                   <button
                     type="button"
                     aria-label="移除图片"
+                    disabled={decoding}
                     onClick={(event) => {
                       event.stopPropagation();
                       clearDecode();
