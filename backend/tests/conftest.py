@@ -98,3 +98,10 @@ def read_xlsx_rows(content: bytes) -> dict[str, list[list[object]]]:
     finally:
         workbook.close()
 
+
+def add_xlsx_padding(content: bytes, size: int) -> bytes:
+    output = io.BytesIO(content)
+    with zipfile.ZipFile(output, "a") as archive:
+        archive.writestr("padding.bin", b"0" * size, compress_type=zipfile.ZIP_STORED)
+    return output.getvalue()
+

@@ -22,6 +22,14 @@ from app.services.excel_reader import SUPPORTED_SUFFIXES, CellValue, ExcelReader
 
 _UNSAFE_FILENAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _WHITESPACE = re.compile(r"\s+")
+_WINDOWS_RESERVED_NAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{index}" for index in range(1, 10)),
+    *(f"LPT{index}" for index in range(1, 10)),
+}
 _ALLOWED_CONTENT_TYPES = {
     ".xlsx": {
         "application/octet-stream",
@@ -63,6 +71,7 @@ class ExcelService:
         with self._slot():
             upload_id, upload_dir = self.storage.create_upload()
             total_bytes = 0
+            total_uncompressed = 0
             metadata_files: list[dict[str, Any]] = []
             try:
                 for upload in files:
@@ -101,7 +110,15 @@ class ExcelService:
                             f"单次任务总文件不能超过 {self.settings.max_task_mb}MB",
                             status_code=413,
                         )
-                    sheets = self.reader.inspect(path)
+                    sheets, uncompressed_size = self.reader.inspect(path)
+                    total_uncompressed += uncompressed_size
+                    if total_uncompressed > self.settings.max_task_uncompressed_bytes:
+                        raise AppError(
+                            "TASK_UNCOMPRESSED_TOO_LARGE",
+                            "单次任务解压后总大小不能超过 "
+                            f"{self.settings.max_task_uncompressed_mb}MB",
+                            status_code=413,
+                        )
                     if not sheets:
                         raise AppError(
                             "EMPTY_WORKBOOK",
@@ -115,6 +132,7 @@ class ExcelService:
                             "stored_name": stored_name,
                             "format": suffix.removeprefix("."),
                             "size": size,
+                            "uncompressed_size": uncompressed_size,
                             "sheets": sheets,
                         }
                     )
@@ -122,6 +140,7 @@ class ExcelService:
                 metadata = {
                     "files": metadata_files,
                     "total_size": total_bytes,
+                    "total_uncompressed_size": total_uncompressed,
                 }
                 self.storage.write_upload_metadata(upload_id, metadata)
                 stored = self.storage.read_upload_metadata(upload_id)
@@ -469,6 +488,16 @@ class ExcelService:
                 "TOO_MANY_SHEETS",
                 f"单次最多处理 {self.settings.max_sheets} 个工作表",
             )
+        cell_count = sum(
+            sheet["non_empty_row_count"] * sheet["column_count"] for _, sheet in selected
+        )
+        if cell_count > self.settings.max_task_cells:
+            raise AppError(
+                "TASK_TOO_COMPLEX",
+                "所选工作表数据量过大，请减少工作表或列数后分批处理",
+                status_code=413,
+                details={"cell_count": cell_count, "max_cells": self.settings.max_task_cells},
+            )
         return upload, selected
 
     def _target_headers(
@@ -634,7 +663,10 @@ class ExcelService:
     def _safe_component(value: str, fallback: str) -> str:
         cleaned = _UNSAFE_FILENAME.sub("_", value).strip(" ._")
         cleaned = _WHITESPACE.sub(" ", cleaned)
-        return (cleaned[:80] or fallback).strip()
+        cleaned = (cleaned[:80] or fallback).strip()
+        if cleaned.split(".", 1)[0].upper() in _WINDOWS_RESERVED_NAMES:
+            return f"_{cleaned}"
+        return cleaned
 
     @staticmethod
     def _unique_filename(filename: str, used_names: set[str]) -> str:

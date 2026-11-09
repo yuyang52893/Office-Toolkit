@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     max_sheet_columns: int = Field(default=1000, ge=1, le=5000)
     max_xlsx_uncompressed_mb: int = Field(default=250, ge=1, le=2000)
     max_xlsx_entries: int = Field(default=10_000, ge=1, le=100_000)
+    max_task_uncompressed_mb: int = Field(default=500, ge=1, le=5000)
+    max_task_cells: int = Field(default=2_000_000, ge=1, le=50_000_000)
     excel_timeout_seconds: int = Field(default=120, ge=5, le=900)
     excel_concurrency: int = Field(default=2, ge=1, le=8)
     qr_max_mb: int = Field(default=10, ge=1, le=100)
@@ -39,6 +41,10 @@ class Settings(BaseSettings):
     @property
     def max_task_bytes(self) -> int:
         return self.max_task_mb * 1024 * 1024
+
+    @property
+    def max_task_uncompressed_bytes(self) -> int:
+        return self.max_task_uncompressed_mb * 1024 * 1024
 
     @property
     def qr_max_bytes(self) -> int:

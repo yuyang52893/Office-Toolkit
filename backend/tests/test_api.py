@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from conftest import (
+    add_xlsx_padding,
     make_csv_bytes,
     make_xls_bytes,
     make_xlsx_bytes,
@@ -11,7 +12,10 @@ from conftest import (
 )
 from fastapi.testclient import TestClient
 
+from app.config import Settings
+from app.main import create_app
 from app.repositories.temp_storage import TempStorage
+from app.services.excel_service import ExcelService
 
 
 def test_health_and_request_id(client: TestClient):
@@ -76,6 +80,54 @@ def test_inspect_rejects_mime_type_that_contradicts_extension(client: TestClient
     )
     assert response.status_code == 415
     assert response.json()["error"]["code"] == "FILE_TYPE_MISMATCH"
+
+
+def test_rejects_task_when_combined_uncompressed_size_exceeds_budget(test_settings):
+    settings = Settings(
+        app_env="test",
+        temp_root=test_settings.temp_root / "uncompressed-budget",
+        max_task_uncompressed_mb=1,
+    )
+    padded = add_xlsx_padding(make_xlsx_bytes(), 600_000)
+    with TestClient(create_app(settings)) as custom_client:
+        response = custom_client.post(
+            "/api/v1/excel/inspect",
+            files=[
+                ("files", ("第一份.xlsx", padded, "application/octet-stream")),
+                ("files", ("第二份.xlsx", padded, "application/octet-stream")),
+            ],
+        )
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "TASK_UNCOMPRESSED_TOO_LARGE"
+
+
+def test_rejects_split_when_selected_sheets_exceed_cell_budget(test_settings):
+    settings = Settings(
+        app_env="test",
+        temp_root=test_settings.temp_root / "cell-budget",
+        max_task_cells=10,
+    )
+    with TestClient(create_app(settings)) as custom_client:
+        upload = upload_files(
+            custom_client,
+            [("销售.xlsx", make_xlsx_bytes(), "application/octet-stream")],
+        )
+        response = custom_client.post(
+            "/api/v1/excel/split",
+            json={
+                "upload_id": upload["upload_id"],
+                "mode": "by_sheet",
+                "sheets": [sheet_refs(upload)[0]],
+                "has_header": True,
+            },
+        )
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "TASK_TOO_COMPLEX"
+
+
+def test_safe_component_prefixes_windows_reserved_names():
+    assert ExcelService._safe_component("CON", "数据") == "_CON"
+    assert ExcelService._safe_component("nul", "数据") == "_nul"
 
 
 def test_split_by_sheet_creates_single_sheet_files(client: TestClient):

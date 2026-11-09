@@ -30,15 +30,15 @@ class ExcelReader:
         self.settings = settings
         csv.field_size_limit(_MAX_CSV_FIELD_SIZE)
 
-    def inspect(self, path: Path) -> list[dict[str, Any]]:
+    def inspect(self, path: Path) -> tuple[list[dict[str, Any]], int]:
         suffix = path.suffix.lower()
-        self._validate_container(path, suffix)
+        uncompressed_size = self._validate_container(path, suffix)
         try:
             if suffix == ".xlsx":
-                return self._inspect_xlsx(path)
+                return self._inspect_xlsx(path), uncompressed_size
             if suffix == ".xls":
-                return self._inspect_xls(path)
-            return [self._inspect_csv(path)]
+                return self._inspect_xls(path), uncompressed_size
+            return [self._inspect_csv(path)], uncompressed_size
         except AppError:
             raise
         except (InvalidFileException, XLRDError, OSError, ValueError, csv.Error) as exc:
@@ -161,7 +161,7 @@ class ExcelReader:
             "headers": headers,
         }
 
-    def _validate_container(self, path: Path, suffix: str) -> None:
+    def _validate_container(self, path: Path, suffix: str) -> int:
         if suffix not in SUPPORTED_SUFFIXES:
             raise AppError("UNSUPPORTED_FILE", "仅支持 xlsx、xls 和 csv 文件", status_code=415)
         if not path.is_file():
@@ -178,12 +178,14 @@ class ExcelReader:
                     unpacked = sum(item.file_size for item in entries)
                     if unpacked > self.settings.max_xlsx_uncompressed_mb * 1024 * 1024:
                         raise AppError("XLSX_TOO_LARGE", "xlsx 解压后体积超过安全限制")
+                    return unpacked
             except zipfile.BadZipFile as exc:
                 raise AppError("INVALID_XLSX", "xlsx 文件已损坏或已加密") from exc
         elif suffix == ".xls":
             with path.open("rb") as source:
                 if source.read(8) != _XLS_SIGNATURE:
                     raise AppError("INVALID_FILE_TYPE", "文件内容与 .xls 扩展名不匹配")
+        return path.stat().st_size
 
     def _iter_xlsx_sheet(self, sheet) -> Iterator[tuple[CellValue, ...]]:
         if sheet.max_row > self.settings.max_sheet_rows + 1:
