@@ -219,6 +219,25 @@ def test_cleanup_options_remove_duplicate_and_empty_rows(client: TestClient):
     assert csv_text.splitlines() == ["名称,数量", "苹果,3", "香蕉,5"]
 
 
+def test_split_without_header_uses_all_rows_as_data(client: TestClient):
+    upload = upload_files(
+        client,
+        [("无表头.csv", b"A,100\nB,200\n", "text/csv")],
+    )
+    response = client.post(
+        "/api/v1/excel/split",
+        json={
+            "upload_id": upload["upload_id"],
+            "mode": "by_sheet",
+            "sheets": sheet_refs(upload),
+            "has_header": False,
+        },
+    )
+    files = read_zip_files(client.get(response.json()["data"]["download_url"]).content)
+    csv_text = next(iter(files.values())).decode("utf-8-sig")
+    assert csv_text.splitlines() == ["A,100", "B,200"]
+
+
 def test_split_by_column_groups_values(client: TestClient):
     upload = upload_files(client, [("销售.xlsx", make_xlsx_bytes(), "application/octet-stream")])
     response = client.post(
@@ -278,6 +297,13 @@ def test_merge_strict_and_by_name(client: TestClient):
 
 
 def test_invalid_and_oversized_files_return_structured_errors(client: TestClient):
+    empty = client.post(
+        "/api/v1/excel/inspect",
+        files={"files": ("empty.csv", b"", "text/csv")},
+    )
+    assert empty.status_code == 400
+    assert empty.json()["error"]["code"] == "EMPTY_FILE"
+
     unsupported = client.post(
         "/api/v1/excel/inspect",
         files={"files": ("notes.txt", b"hello", "text/plain")},
@@ -294,6 +320,21 @@ def test_invalid_and_oversized_files_return_structured_errors(client: TestClient
     assert fake_xlsx.json()["error"]["code"] == "INVALID_FILE_TYPE"
 
 
+def test_duplicate_sheet_selection_is_rejected(client: TestClient):
+    upload = upload_files(client, [("销售.xlsx", make_xlsx_bytes(), "application/octet-stream")])
+    sheet = sheet_refs(upload)[0]
+    response = client.post(
+        "/api/v1/excel/split",
+        json={
+            "upload_id": upload["upload_id"],
+            "mode": "by_sheet",
+            "sheets": [sheet, sheet],
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "DUPLICATE_SHEET"
+
+
 def test_expired_upload_is_removed(client: TestClient, test_settings):
     upload = upload_files(client, [("清单.csv", make_csv_bytes(), "text/csv")])
     storage = TempStorage(test_settings)
@@ -308,4 +349,22 @@ def test_expired_upload_is_removed(client: TestClient, test_settings):
         },
     )
     assert response.status_code in {404, 410}
+
+
+def test_expired_result_cannot_be_downloaded(client: TestClient, test_settings):
+    upload = upload_files(client, [("清单.csv", make_csv_bytes(), "text/csv")])
+    generated = client.post(
+        "/api/v1/excel/split",
+        json={
+            "upload_id": upload["upload_id"],
+            "mode": "by_sheet",
+            "sheets": sheet_refs(upload),
+        },
+    )
+    download_url = generated.json()["data"]["download_url"]
+
+    TempStorage(test_settings).cleanup_expired(now=datetime.now(UTC) + timedelta(hours=1))
+    response = client.get(download_url)
+    assert response.status_code in {404, 410}
+    assert response.json()["success"] is False
 

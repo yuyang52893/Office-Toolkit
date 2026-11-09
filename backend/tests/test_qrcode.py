@@ -3,6 +3,9 @@ import io
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from app.config import Settings
+from app.main import create_app
+
 
 def test_generate_and_decode_qrcode(client: TestClient):
     text = "测试二维码 https://example.com"
@@ -74,4 +77,30 @@ def test_qrcode_validation_errors(client: TestClient):
     )
     assert too_small.status_code == 422
     assert too_small.json()["error"]["code"] == "VALIDATION_ERROR"
+
+    empty = client.post(
+        "/api/v1/qrcode/generate",
+        json={"content": "   ", "size": 128, "mode": "text"},
+    )
+    assert empty.status_code == 400
+    assert empty.json()["error"]["code"] == "EMPTY_CONTENT"
+
+
+def test_qrcode_rejects_image_over_pixel_budget(test_settings):
+    settings = Settings(
+        app_env="test",
+        temp_root=test_settings.temp_root / "qrcode-pixels",
+        qr_max_pixels=1_000_000,
+    )
+    image = Image.new("RGB", (1001, 1000), "white")
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+
+    with TestClient(create_app(settings)) as custom_client:
+        response = custom_client.post(
+            "/api/v1/qrcode/decode",
+            files={"file": ("large.png", output.getvalue(), "image/png")},
+        )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "IMAGE_TOO_LARGE"
 
