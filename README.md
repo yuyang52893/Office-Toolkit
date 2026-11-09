@@ -58,13 +58,22 @@ pnpm build
 pnpm exec playwright test
 ```
 
+`pnpm exec playwright test` 会在演示模式下运行桌面端和移动端测试。真实前后端链路测试会自动启动 FastAPI 和设置为 `NEXT_PUBLIC_DEMO_MODE=false` 的前端：
+
+```powershell
+cd frontend
+pnpm test:e2e:real
+```
+
 ## Docker
+
+需要 Docker Desktop 或 Docker Engine，并启用 Docker Compose v2。
 
 ```powershell
 docker compose up --build
 ```
 
-访问 `http://localhost:8080`。
+访问 `http://localhost:8080`。容器构建固定使用真实模式，Nginx 统一代理页面和 `/api`，上传结果存放在 `office-temp` 临时卷中。
 
 ## 项目文档
 
