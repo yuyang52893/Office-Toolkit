@@ -33,6 +33,7 @@ import {
 } from "@/lib/format";
 import {
   demoMode,
+  downloadExcelResult,
   inspectSpreadsheets,
   mergeSpreadsheets,
   splitSpreadsheets,
@@ -103,6 +104,8 @@ export function ExcelWorkspace({ initialMode = "by_sheet" }: { initialMode?: Exc
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState("");
   const [result, setResult] = useState<ExcelResult | null>(null);
+  const [downloadError, setDownloadError] = useState("");
+  const [downloading, setDownloading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
   const busy = phase !== "idle";
@@ -298,6 +301,7 @@ export function ExcelWorkspace({ initialMode = "by_sheet" }: { initialMode?: Exc
           ...common,
           header_strategy: headerStrategy,
         });
+        setDownloadError("");
         setResult(data);
         return;
       }
@@ -317,6 +321,7 @@ export function ExcelWorkspace({ initialMode = "by_sheet" }: { initialMode?: Exc
         ...(mode === "by_rows" ? { rows_per_file: numericRows } : {}),
         ...(mode === "by_column" ? { column_index: Number(effectiveColumnIndex) } : {}),
       });
+      setDownloadError("");
       setResult(data);
     } catch (runError) {
       setError(getErrorMessage(runError));
@@ -330,8 +335,25 @@ export function ExcelWorkspace({ initialMode = "by_sheet" }: { initialMode?: Exc
     setUpload(null);
     setSelected({});
     setResult(null);
+    setDownloadError("");
+    setDownloading(false);
     setError("");
     setPhase("idle");
+  }
+
+  async function handleDownload() {
+    if (!result) {
+      return;
+    }
+    setDownloading(true);
+    setDownloadError("");
+    try {
+      await downloadExcelResult(result);
+    } catch (downloadFailure) {
+      setDownloadError(getErrorMessage(downloadFailure));
+    } finally {
+      setDownloading(false);
+    }
   }
 
   return (
@@ -803,6 +825,11 @@ export function ExcelWorkspace({ initialMode = "by_sheet" }: { initialMode?: Exc
                 </div>
               </div>
             </div>
+            {downloadError ? (
+              <div className="px-5 pt-4 sm:px-7">
+                <StatusBanner tone="error">{downloadError}</StatusBanner>
+              </div>
+            ) : null}
             <div className="flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
               <div className="flex min-w-0 items-center gap-3">
                 <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600">
@@ -825,14 +852,19 @@ export function ExcelWorkspace({ initialMode = "by_sheet" }: { initialMode?: Exc
                   <RefreshCw size={14} />
                   继续调整
                 </button>
-                <a
-                  href={result.download_url}
-                  download={result.filename}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800"
+                <button
+                  type="button"
+                  onClick={handleDownload}
+                  disabled={downloading}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <Download size={15} />
-                  {demoMode ? "下载演示结果" : "下载结果"}
-                </a>
+                  {downloading ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Download size={15} />
+                  )}
+                  {downloading ? "正在下载…" : demoMode ? "下载演示结果" : "下载结果"}
+                </button>
               </div>
             </div>
           </section>

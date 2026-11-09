@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+import { demoMode } from "@/lib/config";
+
 type ToolAction = {
   title: string;
   description: string;
@@ -151,7 +153,7 @@ export default function HomePage() {
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Sparkles size={13} className="text-blue-600" />
-              数据仅作演示
+              {demoMode ? "数据仅作演示" : "文件仅临时保存"}
             </span>
             <span>支持 xlsx / xls / csv</span>
           </div>
@@ -190,9 +192,13 @@ export default function HomePage() {
         <div className="mt-8 flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white/60 px-4 py-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <span className="inline-flex items-center gap-2">
             <ShieldCheck size={15} className="text-emerald-600" />
-            当前为演示模式，不会上传或保存真实文件
+            {demoMode
+              ? "当前为演示模式，不会上传或保存真实文件"
+              : "已连接真实处理服务，文件将在 30 分钟后自动删除"}
           </span>
-          <span>界面与流程用于评审，后续可切换真实后端</span>
+          <span>
+            {demoMode ? "界面与流程用于评审，后续可切换真实后端" : "不建立处理历史，也不长期保存文件"}
+          </span>
         </div>
       </section>
     </div>

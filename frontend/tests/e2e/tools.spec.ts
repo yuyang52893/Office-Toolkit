@@ -82,7 +82,7 @@ test("Excel/CSV 按行数拆分并下载 ZIP", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "拆分完成" })).toBeVisible();
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("link", { name: "下载演示结果" }).click();
+  await page.getByRole("button", { name: "下载演示结果" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/^演示结果说明_.*\.txt$/);
 });

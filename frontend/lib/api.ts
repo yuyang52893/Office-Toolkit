@@ -8,6 +8,7 @@ import type {
   SheetRef,
   SplitMode,
 } from "@/lib/types";
+import { demoMode } from "@/lib/config";
 import {
   decodeDemoQrCode,
   generateDemoQrCode,
@@ -17,7 +18,7 @@ import {
 } from "@/lib/demo-api";
 import { ApiError } from "@/lib/errors";
 
-export const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE !== "false";
+export { demoMode } from "@/lib/config";
 export { ApiError } from "@/lib/errors";
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -113,6 +114,35 @@ export async function mergeSpreadsheets(payload: MergePayload): Promise<ExcelRes
     body: JSON.stringify(payload),
   });
   return readJson<ExcelResult>(response);
+}
+
+function saveDownload(url: string, filename: string) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+}
+
+export async function downloadExcelResult(result: ExcelResult): Promise<void> {
+  if (result.download_url.startsWith("blob:")) {
+    saveDownload(result.download_url, result.filename);
+    return;
+  }
+
+  const response = await fetch(result.download_url);
+  if (!response.ok) {
+    return readError(response);
+  }
+
+  const objectUrl = URL.createObjectURL(await response.blob());
+  try {
+    saveDownload(objectUrl, result.filename);
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  }
 }
 
 export async function generateQrCode(
