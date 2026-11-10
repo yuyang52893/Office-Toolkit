@@ -3,11 +3,14 @@
 import { ApiError } from "@/lib/errors";
 import { clearToken, getToken } from "@/lib/auth-storage";
 import type {
+  AuditLogItem,
   ApiErrorBody,
   ApiSuccess,
   AuthUser,
   HistoryItem,
   LoginResult,
+  PaginatedItems,
+  RuntimeErrorItem,
 } from "@/lib/types";
 
 type RegisterPayload = {
@@ -157,4 +160,130 @@ export async function downloadHistoryFile(historyId: string): Promise<Blob> {
     return throwResponseError(response);
   }
   return response.blob();
+}
+
+function withQuery(
+  path: string,
+  params: Record<string, string | number | undefined | null>,
+): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, String(value));
+    }
+  }
+  const suffix = query.toString();
+  return suffix ? `${path}?${suffix}` : path;
+}
+
+async function readAuthenticatedBlob(path: string): Promise<Blob> {
+  const response = await authenticatedFetch(path);
+  if (!response.ok) {
+    return throwResponseError(response);
+  }
+  return response.blob();
+}
+
+export async function listAdminUsers(): Promise<AuthUser[]> {
+  const data = await readJson<{ items: AuthUser[] }>(
+    await authenticatedFetch("/api/v1/admin/users"),
+  );
+  return data.items;
+}
+
+export async function setAdminUserStatus(userId: number, isActive: boolean): Promise<AuthUser> {
+  return readJson<AuthUser>(
+    await authenticatedFetch(`/api/v1/admin/users/${userId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_active: isActive }),
+    }),
+  );
+}
+
+export async function setAdminUserRole(
+  userId: number,
+  role: "user" | "admin",
+): Promise<AuthUser> {
+  return readJson<AuthUser>(
+    await authenticatedFetch(`/api/v1/admin/users/${userId}/role`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    }),
+  );
+}
+
+export async function forceAdminUserLogout(userId: number): Promise<AuthUser> {
+  return readJson<AuthUser>(
+    await authenticatedFetch(`/api/v1/admin/users/${userId}/logout`, {
+      method: "POST",
+    }),
+  );
+}
+
+export async function resetAdminUserPassword(
+  userId: number,
+): Promise<{ temporary_password: string; user: AuthUser }> {
+  return readJson<{ temporary_password: string; user: AuthUser }>(
+    await authenticatedFetch(`/api/v1/admin/users/${userId}/reset-password`, {
+      method: "POST",
+    }),
+  );
+}
+
+export type AuditLogFilters = {
+  date?: string;
+  event?: string;
+  outcome?: "success" | "failure" | "";
+  request_id?: string;
+  username?: string;
+  page?: number;
+  page_size?: number;
+};
+
+export async function listAuditLogs(
+  filters: AuditLogFilters,
+): Promise<PaginatedItems<AuditLogItem>> {
+  return readJson<PaginatedItems<AuditLogItem>>(
+    await authenticatedFetch(withQuery("/api/v1/admin/audit-logs", filters)),
+  );
+}
+
+export async function downloadAuditLogs(
+  filters: AuditLogFilters,
+  format: "csv" | "json",
+): Promise<Blob> {
+  return readAuthenticatedBlob(
+    withQuery("/api/v1/admin/audit-logs/download", {
+      date: filters.date,
+      event: filters.event,
+      outcome: filters.outcome,
+      request_id: filters.request_id,
+      username: filters.username,
+      format,
+    }),
+  );
+}
+
+export async function listRuntimeErrors(
+  date: string,
+  page = 1,
+  pageSize = 50,
+): Promise<PaginatedItems<RuntimeErrorItem> & { date: string }> {
+  return readJson<PaginatedItems<RuntimeErrorItem> & { date: string }>(
+    await authenticatedFetch(
+      withQuery("/api/v1/admin/runtime-errors", {
+        date,
+        page,
+        page_size: pageSize,
+      }),
+    ),
+  );
+}
+
+export async function downloadRuntimeErrors(date: string): Promise<Blob> {
+  return readAuthenticatedBlob(
+    withQuery("/api/v1/admin/runtime-errors/download", { date }),
+  );
 }

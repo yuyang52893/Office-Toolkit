@@ -221,6 +221,18 @@ def test_cleanup_options_remove_duplicate_and_empty_rows(client: TestClient):
     assert csv_text.splitlines() == ["名称,数量", "苹果,3", "香蕉,5"]
 
 
+def test_history_list_uses_unified_response_contract(client: TestClient):
+    response = client.get(
+        "/api/v1/history",
+        headers=authenticated_headers(client),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"] == {"items": []}
+    assert body["error"] is None
+
+
 def test_split_without_header_uses_all_rows_as_data(client: TestClient):
     upload = upload_files(
         client,

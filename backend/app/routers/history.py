@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.common.rate_limit import resolve_client_ip
+from app.common.responses import success_response
 from app.db.models import User
 from app.dependencies.auth import get_current_user, get_db
 from app.schemas.history import HistoryItem
@@ -42,9 +43,14 @@ def list_history(
     service = _service(request, session)
     request_id, ip = _audit_context(request)
     items = service.list_for_user(user.id, request_id=request_id, ip=ip)
-    return {
-        "items": [HistoryItem.model_validate(item).model_dump(mode="json") for item in items],
-    }
+    return success_response(
+        request,
+        {
+            "items": [
+                HistoryItem.model_validate(item).model_dump(mode="json") for item in items
+            ],
+        },
+    )
 
 
 @router.get("/{history_id}/download")

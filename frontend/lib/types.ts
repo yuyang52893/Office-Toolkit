@@ -93,6 +93,36 @@ export type HistoryItem = {
   purge_after: string | null;
 };
 
+export type AuditLogItem = {
+  id: number;
+  request_id: string;
+  event: string;
+  outcome: "success" | "failure";
+  actor_user_id: number | null;
+  target_user_id: number | null;
+  actor_username: string | null;
+  target_username: string | null;
+  ip: string;
+  details: Record<string, unknown>;
+  created_at: string;
+};
+
+export type PaginatedItems<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export type RuntimeErrorItem = {
+  timestamp?: string;
+  level?: string;
+  logger?: string;
+  message?: string;
+  event?: string;
+  [key: string]: unknown;
+};
+
 export type ApiErrorBody = {
   success: false;
   data: null;

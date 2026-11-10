@@ -18,9 +18,19 @@ import {
   splitDemoSpreadsheets,
 } from "@/lib/demo-api";
 import { ApiError } from "@/lib/errors";
+import { getToken } from "@/lib/auth-storage";
 
 export { demoMode } from "@/lib/config";
 export { ApiError } from "@/lib/errors";
+
+function withAuth(init: RequestInit = {}): RequestInit {
+  const token = getToken();
+  const headers = new Headers(init.headers);
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return { ...init, headers };
+}
 
 async function readJson<T>(response: Response): Promise<T> {
   let body: ApiSuccess<T> | ApiErrorBody;
@@ -66,10 +76,10 @@ export async function inspectSpreadsheets(files: File[]): Promise<ExcelUpload> {
   for (const file of files) {
     form.append("files", file, file.name);
   }
-  const response = await fetch("/api/v1/excel/inspect", {
+  const response = await fetch("/api/v1/excel/inspect", withAuth({
     method: "POST",
     body: form,
-  });
+  }));
   return readJson<ExcelUpload>(response);
 }
 
@@ -88,11 +98,11 @@ export async function splitSpreadsheets(payload: SplitPayload): Promise<ExcelRes
   if (demoMode) {
     return splitDemoSpreadsheets(payload);
   }
-  const response = await fetch("/api/v1/excel/split", {
+  const response = await fetch("/api/v1/excel/split", withAuth({
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  });
+  }));
   return readJson<ExcelResult>(response);
 }
 
@@ -109,11 +119,11 @@ export async function mergeSpreadsheets(payload: MergePayload): Promise<ExcelRes
   if (demoMode) {
     return mergeDemoSpreadsheets(payload);
   }
-  const response = await fetch("/api/v1/excel/merge", {
+  const response = await fetch("/api/v1/excel/merge", withAuth({
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  });
+  }));
   return readJson<ExcelResult>(response);
 }
 
@@ -133,7 +143,7 @@ export async function downloadExcelResult(result: ExcelResult): Promise<void> {
     return;
   }
 
-  const response = await fetch(result.download_url);
+  const response = await fetch(result.download_url, withAuth());
   if (!response.ok) {
     return readError(response);
   }
@@ -154,11 +164,11 @@ export async function generateQrCode(
   if (demoMode) {
     return { ...(await generateDemoQrCode(content, size, mode)), history: null };
   }
-  const response = await fetch("/api/v1/qrcode/generate", {
+  const response = await fetch("/api/v1/qrcode/generate", withAuth({
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content, size, mode }),
-  });
+  }));
   if (!response.ok) {
     return readError(response);
   }
@@ -193,10 +203,10 @@ export async function decodeQrCode(
   }
   const form = new FormData();
   form.append("file", file, file.name);
-  const response = await fetch("/api/v1/qrcode/decode", {
+  const response = await fetch("/api/v1/qrcode/decode", withAuth({
     method: "POST",
     body: form,
-  });
+  }));
   return readJson<{ items: QrDecodedItem[]; count: number }>(response);
 }
 

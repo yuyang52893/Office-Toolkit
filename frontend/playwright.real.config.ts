@@ -13,6 +13,7 @@ function serverEnv(overrides: Record<string, string>): Record<string, string> {
 export default defineConfig({
   testDir: "./tests/e2e-real",
   fullyParallel: false,
+  workers: 1,
   timeout: 60_000,
   expect: {
     timeout: 15_000,
@@ -32,15 +33,22 @@ export default defineConfig({
   webServer: [
     {
       name: "backend",
-      command: "uv run uvicorn app.main:app --host 127.0.0.1 --port 8000",
+      command: "uv run python scripts/run_e2e_server.py",
       cwd: path.resolve(process.cwd(), "../backend"),
       url: "http://127.0.0.1:8000/api/v1/health",
       timeout: 120_000,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       env: serverEnv({
         APP_ENV: "test",
+        DATABASE_URL:
+          "sqlite+pysqlite:///./tmp/e2e-real/phase3-e2e.sqlite3",
+        JWT_SECRET: "e2e-test-secret-at-least-32-characters",
         TEMP_ROOT: "./tmp/e2e-real",
+        HISTORY_ROOT: "./tmp/e2e-real/history",
+        LOG_DIR: "./tmp/e2e-real/logs",
+        RUNTIME_LOG_DIR: "./tmp/e2e-real/logs/runtime-errors",
         CLEANUP_INTERVAL_SECONDS: "3600",
+        E2E_BACKEND_PORT: "8000",
       }),
     },
     {
