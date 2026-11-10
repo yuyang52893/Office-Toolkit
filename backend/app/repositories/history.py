@@ -57,6 +57,16 @@ def expired_placeholders(session: Session, now: datetime) -> list[UserHistory]:
     )
 
 
+def all_expired(session: Session) -> list[UserHistory]:
+    return list(
+        session.scalars(
+            select(UserHistory)
+            .where(UserHistory.status == "expired")
+            .order_by(UserHistory.expired_at.asc(), UserHistory.id.asc())
+        )
+    )
+
+
 def add(session: Session, item: UserHistory) -> UserHistory:
     session.add(item)
     session.flush()

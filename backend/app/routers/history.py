@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.common.rate_limit import resolve_client_ip
 from app.db.models import User
 from app.dependencies.auth import get_current_user, get_db
 from app.schemas.history import HistoryItem
@@ -22,6 +23,16 @@ def _service(request: Request, session: Session) -> HistoryService:
     )
 
 
+def _audit_context(request: Request) -> tuple[str, str]:
+    return (
+        getattr(request.state, "request_id", "history-request"),
+        resolve_client_ip(
+            request,
+            trust_proxy_headers=request.app.state.settings.trust_proxy_headers,
+        ),
+    )
+
+
 @router.get("")
 def list_history(
     request: Request,
@@ -29,7 +40,8 @@ def list_history(
     session: DbSession,
 ):
     service = _service(request, session)
-    items = service.list_for_user(user.id)
+    request_id, ip = _audit_context(request)
+    items = service.list_for_user(user.id, request_id=request_id, ip=ip)
     return {
         "items": [HistoryItem.model_validate(item).model_dump(mode="json") for item in items],
     }
@@ -43,7 +55,13 @@ def download_history(
     session: DbSession,
 ):
     service = _service(request, session)
-    path, item = service.resolve_download(user.id, history_id)
+    request_id, ip = _audit_context(request)
+    path, item = service.resolve_download(
+        user.id,
+        history_id,
+        request_id=request_id,
+        ip=ip,
+    )
     return FileResponse(
         Path(path),
         filename=item.result_filename,
