@@ -1,6 +1,7 @@
 import random
 import secrets
 import string
+import threading
 
 from sqlalchemy.orm import Session
 
@@ -9,6 +10,21 @@ from app.db.models import User
 from app.repositories import users
 from app.security.passwords import hash_password
 from app.services import auth as auth_service
+
+
+class AdminMutationLock:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+
+    def __enter__(self) -> "AdminMutationLock":
+        self._lock.acquire()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self._lock.release()
+
+
+_admin_mutation_lock = AdminMutationLock()
 
 
 def public_user(user: User) -> dict:
@@ -50,23 +66,25 @@ def list_users(session: Session) -> list[User]:
 
 
 def set_status(session: Session, user_id: int, is_active: bool) -> User:
-    user = _target_for_update(session, user_id)
-    deactivating = user.is_active and not is_active
-    _ensure_last_admin(session, user, deactivating=deactivating)
-    user.is_active = is_active
-    user.session_version += 1
-    session.commit()
-    return user
+    with _admin_mutation_lock:
+        user = _target_for_update(session, user_id)
+        deactivating = user.is_active and not is_active
+        _ensure_last_admin(session, user, deactivating=deactivating)
+        user.is_active = is_active
+        user.session_version += 1
+        session.commit()
+        return user
 
 
 def set_role(session: Session, user_id: int, role: str) -> User:
-    user = _target_for_update(session, user_id)
-    demoting = user.role == "admin" and role == "user"
-    _ensure_last_admin(session, user, deactivating=demoting)
-    user.role = role
-    user.session_version += 1
-    session.commit()
-    return user
+    with _admin_mutation_lock:
+        user = _target_for_update(session, user_id)
+        demoting = user.role == "admin" and role == "user"
+        _ensure_last_admin(session, user, deactivating=demoting)
+        user.role = role
+        user.session_version += 1
+        session.commit()
+        return user
 
 
 def force_logout(session: Session, user_id: int) -> User:

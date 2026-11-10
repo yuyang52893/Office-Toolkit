@@ -48,6 +48,8 @@ def get_optional_user(
     user = users.get_by_id(session, decoded[0])
     if user is None or not user.is_active or user.session_version != decoded[1]:
         return None
+    if user.must_change_password:
+        return None
     return user
 
 

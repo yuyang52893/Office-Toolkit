@@ -1,7 +1,16 @@
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+from fastapi import Depends, Request
 from fastapi.testclient import TestClient
 
+from app.common.responses import success_response
 from app.db.models import User
+from app.dependencies.auth import DbSession, get_optional_user
+from app.repositories import users
 from app.security.passwords import hash_password
+from app.services import admin as admin_service
 
 
 def bearer(token: str) -> dict[str, str]:
@@ -164,3 +173,48 @@ def test_must_change_password_blocks_admin_features_until_change(client):
         ).status_code
         == 200
     )
+
+
+def test_optional_user_ignores_must_change_password_users(client):
+    app = client.app
+    user_id = add_user(client, "30000001")
+    with app.state.db_session_factory() as session:
+        user = users.get_by_id(session, user_id)
+        user.must_change_password = True
+        session.commit()
+
+    token = login(client, "30000001")
+
+    @app.get("/api/v1/test-optional-user")
+    def optional_probe(
+        request: Request,
+        session: DbSession,
+        user: object = Depends(get_optional_user),
+    ):
+        return success_response(request, {"user_id": user.id if user else None})
+
+    response = client.get("/api/v1/test-optional-user", headers=bearer(token))
+    assert response.status_code == 200
+    assert response.json()["data"]["user_id"] is None
+
+
+def test_admin_mutation_lock_excludes_concurrent_sections():
+    lock = admin_service.AdminMutationLock()
+    active = 0
+    peak = 0
+    guard = threading.Lock()
+
+    def worker():
+        nonlocal active, peak
+        with lock:
+            with guard:
+                active += 1
+                peak = max(peak, active)
+            time.sleep(0.03)
+            with guard:
+                active -= 1
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(lambda _index: worker(), range(2)))
+
+    assert peak == 1
