@@ -1,5 +1,11 @@
 name: office-tools
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "7"
+
 services:
   backend:
     build:
@@ -8,8 +14,10 @@ services:
     environment:
       APP_ENV: production
       TEMP_ROOT: /data/tmp
+      LOG_DIR: /data/logs
     volumes:
       - office-temp:/data/tmp
+      - ./logs/backend:/data/logs
     expose:
       - "8000"
     healthcheck:
@@ -22,6 +30,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging: *default-logging
 
   frontend:
     build:
@@ -37,6 +46,7 @@ services:
         condition: service_healthy
     expose:
       - "3000"
+    logging: *default-logging
 
   nginx:
     image: nginx:1.27-alpine
@@ -48,6 +58,7 @@ services:
     depends_on:
       - backend
       - frontend
+    logging: *default-logging
 
 volumes:
   office-temp:

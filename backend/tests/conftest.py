@@ -17,6 +17,7 @@ def test_settings(tmp_path: Path) -> Settings:
     return Settings(
         app_env="test",
         temp_root=tmp_path / "storage",
+        log_dir=tmp_path / "logs",
         retention_minutes=30,
         cleanup_interval_seconds=3600,
     )
