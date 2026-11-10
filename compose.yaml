@@ -1,5 +1,11 @@
 name: office-tools
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "7"
+
 services:
   backend:
     build:
@@ -8,8 +14,17 @@ services:
     environment:
       APP_ENV: production
       TEMP_ROOT: /data/tmp
+      LOG_DIR: /data/logs
+      TRUST_PROXY_HEADERS: "true"
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
+      EXCEL_RATE_LIMIT_PER_MINUTE: ${EXCEL_RATE_LIMIT_PER_MINUTE:-10}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      ALERT_WEBHOOK_TIMEOUT_SECONDS: ${ALERT_WEBHOOK_TIMEOUT_SECONDS:-3}
+      ALERT_COOLDOWN_SECONDS: ${ALERT_COOLDOWN_SECONDS:-60}
     volumes:
       - office-temp:/data/tmp
+      - office-logs:/data/logs
     expose:
       - "8000"
     healthcheck:
@@ -22,6 +37,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging: *default-logging
 
   frontend:
     build:
@@ -37,6 +53,7 @@ services:
         condition: service_healthy
     expose:
       - "3000"
+    logging: *default-logging
 
   nginx:
     image: nginx:1.27-alpine
@@ -48,6 +65,8 @@ services:
     depends_on:
       - backend
       - frontend
+    logging: *default-logging
 
 volumes:
   office-temp:
+  office-logs:

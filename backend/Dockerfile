@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY app ./app
 RUN useradd --create-home --uid 10001 --user-group appuser \
-    && mkdir -p /data/tmp \
+    && mkdir -p /data/tmp /data/logs \
     && chown -R appuser:appuser /data
 
 USER appuser
