@@ -147,6 +147,23 @@ def test_audit_download_returns_all_matching_rows(client):
     assert len(payload) == 120
 
 
+def test_audit_download_over_limit_returns_413_before_streaming(client, monkeypatch):
+    headers = admin_headers(client)
+
+    def over_limit_list(*_args, **_kwargs):
+        return [], 100_001
+
+    monkeypatch.setattr("app.services.audit.audit_repository.list_logs", over_limit_list)
+    response = client.get(
+        "/api/v1/admin/audit-logs/download",
+        params={"format": "json"},
+        headers=headers,
+    )
+
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "EXPORT_TOO_LARGE"
+
+
 def test_audit_download_rejects_unknown_format(client):
     headers = admin_headers(client)
     response = client.get(

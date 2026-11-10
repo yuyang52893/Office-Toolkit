@@ -120,16 +120,38 @@ class AuditService:
                 page_size=page_size,
             )
             total = data["total"]
-            if total > _EXPORT_MAX_ROWS:
-                raise AppError(
-                    "EXPORT_TOO_LARGE",
-                    f"一次最多导出 {_EXPORT_MAX_ROWS} 条审计日志，请缩小筛选范围",
-                    status_code=413,
-                )
             yield from data["items"]
             if page * page_size >= total:
                 return
             page += 1
+
+    def ensure_export_allowed(
+        self,
+        *,
+        day: date | None,
+        event: str | None,
+        outcome: str | None,
+        request_id: str | None,
+        username: str | None,
+    ) -> None:
+        start, end = self._day_bounds(day)
+        _, total = audit_repository.list_logs(
+            self.session,
+            start=start,
+            end=end,
+            event=event,
+            outcome=outcome,
+            request_id=request_id,
+            username=username,
+            page=1,
+            page_size=1,
+        )
+        if total > _EXPORT_MAX_ROWS:
+            raise AppError(
+                "EXPORT_TOO_LARGE",
+                f"一次最多导出 {_EXPORT_MAX_ROWS} 条审计日志，请缩小筛选范围",
+                status_code=413,
+            )
 
     def purge_expired(self, now: datetime) -> int:
         now_utc = now if now.tzinfo is not None else now.replace(tzinfo=UTC)

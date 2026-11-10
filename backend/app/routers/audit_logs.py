@@ -91,6 +91,14 @@ def download_logs(
     username: Annotated[str | None, Query(max_length=18)] = None,
     format: Annotated[Literal["json", "csv"], Query()] = "json",
 ):
+    audit = AuditService(session)
+    audit.ensure_export_allowed(
+        day=date,
+        event=event,
+        outcome=outcome,
+        request_id=request_id,
+        username=username,
+    )
     _record(
         request,
         session,
@@ -127,7 +135,7 @@ def download_logs(
                 "ip",
                 "details",
             ]
-            for item in AuditService(session).iter_logs(
+            for item in audit.iter_logs(
                 day=date,
                 event=event,
                 outcome=outcome,
@@ -155,7 +163,7 @@ def download_logs(
     def json_stream():
         yield "["
         first = True
-        for item in AuditService(session).iter_logs(
+        for item in audit.iter_logs(
             day=date,
             event=event,
             outcome=outcome,
