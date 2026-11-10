@@ -45,6 +45,7 @@ def cleanup_runtime_logs(
     now: datetime,
     retention_days: int,
     total_max_bytes: int,
+    preserve: Path | None = None,
 ) -> int:
     if not root.is_dir():
         return 0
@@ -69,9 +70,12 @@ def cleanup_runtime_logs(
 
     remaining = [(day, path) for day, path in sorted(dated_files) if path.exists()]
     total_size = sum(path.stat().st_size for _, path in remaining)
+    preserved = preserve.resolve() if preserve is not None else None
     for _, path in remaining:
         if total_size <= total_max_bytes:
             break
+        if preserved is not None and path.resolve() == preserved:
+            continue
         size = path.stat().st_size
         path.unlink(missing_ok=True)
         total_size -= size
@@ -108,12 +112,14 @@ class DailyCappedFileHandler(logging.Handler):
             day = datetime.fromtimestamp(record.created, _LOCAL_TIMEZONE).date()
             path = self._open_for_day(day)
             payload = (self.format(record) + "\n").encode("utf-8")
+            self._cleanup(preserve=path)
             current_size = path.stat().st_size
-            if current_size + len(payload) > self.max_bytes:
+            effective_max = min(self.max_bytes, self.total_max_bytes)
+            if current_size + len(payload) > effective_max:
                 if day not in self._cap_notified:
                     self._cap_notified.add(day)
                     sys.stderr.write(
-                        f"runtime error log daily cap reached for {day.isoformat()}\n"
+                        f"runtime error log capacity reached for {day.isoformat()}\n"
                     )
                     sys.stderr.flush()
                 return
@@ -134,12 +140,13 @@ class DailyCappedFileHandler(logging.Handler):
         self._cleanup()
         return path
 
-    def _cleanup(self) -> None:
+    def _cleanup(self, *, preserve: Path | None = None) -> None:
         cleanup_runtime_logs(
             self.root,
             now=self.clock(),
             retention_days=self.retention_days,
             total_max_bytes=self.total_max_bytes,
+            preserve=preserve,
         )
 
     def close(self) -> None:

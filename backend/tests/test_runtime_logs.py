@@ -75,6 +75,23 @@ def test_runtime_log_cleanup_applies_age_and_total_size_caps(tmp_path: Path):
     assert sum(path.stat().st_size for path in tmp_path.iterdir()) <= 1000
 
 
+def test_runtime_log_total_cap_is_enforced_during_continuous_writes(tmp_path: Path):
+    handler = make_handler(
+        tmp_path,
+        max_bytes=4096,
+        total_max_bytes=2500,
+    )
+    logger = make_logger(handler)
+
+    for index in range(100):
+        logger.error("failure-%s-%s", index, "x" * 100)
+    handler.close()
+
+    files = list(tmp_path.glob("runtime-errors-*.jsonl"))
+    assert files
+    assert sum(path.stat().st_size for path in files) <= 2500
+
+
 def _add_admin(client: TestClient, username: str = "10000001") -> None:
     with client.app.state.db_session_factory() as session:
         session.add(
@@ -84,6 +101,21 @@ def _add_admin(client: TestClient, username: str = "10000001") -> None:
                 recovery_question="问题",
                 recovery_answer_hash=hash_password("答案"),
                 role="admin",
+                is_active=True,
+            )
+        )
+        session.commit()
+
+
+def _add_user(client: TestClient, username: str = "10000002") -> None:
+    with client.app.state.db_session_factory() as session:
+        session.add(
+            User(
+                username=username,
+                password_hash=hash_password("Password1"),
+                recovery_question="问题",
+                recovery_answer_hash=hash_password("答案"),
+                role="user",
                 is_active=True,
             )
         )
@@ -121,6 +153,7 @@ def test_admin_can_list_and_download_runtime_errors(tmp_path: Path):
                         "message": "two",
                     }
                 ),
+                "{corrupt-json",
             ]
         )
         + "\n",
@@ -178,10 +211,18 @@ def test_runtime_log_endpoints_are_admin_only_and_reject_invalid_dates(tmp_path:
     with TestClient(create_app(settings)) as client:
         Base.metadata.create_all(client.app.state.db_engine)
         _add_admin(client)
+        _add_user(client)
         headers = _login(client, "10000001")
+        user_headers = _login(client, "10000002")
 
         no_token = client.get("/api/v1/admin/runtime-errors", params={"date": "2026-11-10"})
         assert no_token.status_code == 401
+        forbidden = client.get(
+            "/api/v1/admin/runtime-errors",
+            params={"date": "2026-11-10"},
+            headers=user_headers,
+        )
+        assert forbidden.status_code == 403
         invalid = client.get(
             "/api/v1/admin/runtime-errors",
             params={"date": "../../etc/passwd"},
@@ -194,3 +235,36 @@ def test_runtime_log_endpoints_are_admin_only_and_reject_invalid_dates(tmp_path:
             headers=headers,
         )
         assert missing.status_code == 404
+        audit = client.get("/api/v1/admin/audit-logs", headers=headers).json()["data"]["items"]
+        assert "admin.runtime_errors.download.failure" in {
+            item["event"] for item in audit
+        }
+
+
+def test_runtime_log_list_failure_is_audited(tmp_path: Path, monkeypatch):
+    settings = Settings(
+        app_env="test",
+        database_url="sqlite+pysqlite:///:memory:",
+        temp_root=tmp_path / "storage",
+        log_dir=tmp_path / "logs",
+        runtime_log_dir=tmp_path / "logs" / "runtime-errors",
+    )
+
+    def fail_list(self, *_args, **_kwargs):
+        raise OSError("disk read failed")
+
+    monkeypatch.setattr("app.services.runtime_logs.RuntimeLogService.list_errors", fail_list)
+    with TestClient(create_app(settings), raise_server_exceptions=False) as client:
+        Base.metadata.create_all(client.app.state.db_engine)
+        _add_admin(client)
+        headers = _login(client, "10000001")
+        response = client.get(
+            "/api/v1/admin/runtime-errors",
+            params={"date": "2026-11-10"},
+            headers=headers,
+        )
+        assert response.status_code == 500
+        audit = client.get("/api/v1/admin/audit-logs", headers=headers).json()["data"]["items"]
+        assert "admin.runtime_errors.list.failure" in {
+            item["event"] for item in audit
+        }

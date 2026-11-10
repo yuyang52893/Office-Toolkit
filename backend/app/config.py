@@ -33,10 +33,7 @@ class Settings(BaseSettings):
     history_retention_minutes: int = Field(default=30, ge=1, le=24 * 60)
     history_placeholder_hours: int = Field(default=3, ge=1, le=24 * 7)
     log_dir: Path = Path("./logs")
-    log_file_name: str = "app.jsonl"
     log_level: str = "INFO"
-    log_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1024)
-    log_backup_count: int = Field(default=7, ge=1, le=100)
     runtime_log_dir: Path = Path("./logs/runtime-errors")
     runtime_log_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
     runtime_log_retention_days: int = Field(default=14, ge=1, le=90)
@@ -96,10 +93,6 @@ class Settings(BaseSettings):
     @property
     def qr_max_bytes(self) -> int:
         return self.qr_max_mb * 1024 * 1024
-
-    @property
-    def log_path(self) -> Path:
-        return self.log_dir / self.log_file_name
 
     @property
     def cors_origin_list(self) -> list[str]:

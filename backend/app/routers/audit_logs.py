@@ -194,11 +194,27 @@ def list_runtime_errors(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 50,
 ):
-    data = RuntimeLogService(request.app.state.settings).list_errors(
-        date,
-        page=page,
-        page_size=page_size,
-    )
+    try:
+        data = RuntimeLogService(request.app.state.settings).list_errors(
+            date,
+            page=page,
+            page_size=page_size,
+        )
+    except Exception as exc:
+        _record(
+            request,
+            session,
+            event="admin.runtime_errors.list.failure",
+            outcome="failure",
+            actor_user_id=_admin.id,
+            details={
+                "date": date.isoformat(),
+                "page": page,
+                "page_size": page_size,
+                "reason": getattr(exc, "code", "READ_FAILED"),
+            },
+        )
+        raise
     _record(
         request,
         session,
@@ -217,7 +233,18 @@ def download_runtime_errors(
     _admin: Admin,
     date: Annotated[date, Query()],
 ):
-    path = RuntimeLogService(request.app.state.settings).resolve_download(date)
+    try:
+        path = RuntimeLogService(request.app.state.settings).resolve_download(date)
+    except Exception as exc:
+        _record(
+            request,
+            session,
+            event="admin.runtime_errors.download.failure",
+            outcome="failure",
+            actor_user_id=_admin.id,
+            details={"date": date.isoformat(), "reason": getattr(exc, "code", "READ_FAILED")},
+        )
+        raise
     _record(
         request,
         session,
