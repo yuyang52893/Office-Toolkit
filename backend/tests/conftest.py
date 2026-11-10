@@ -20,6 +20,7 @@ from app.main import create_app
 def test_settings(tmp_path: Path) -> Settings:
     return Settings(
         app_env="test",
+        database_url="sqlite+pysqlite:///:memory:",
         temp_root=tmp_path / "storage",
         log_dir=tmp_path / "logs",
         retention_minutes=30,
@@ -30,6 +31,7 @@ def test_settings(tmp_path: Path) -> Settings:
 @pytest.fixture
 def client(test_settings: Settings) -> Iterator[TestClient]:
     with TestClient(create_app(test_settings)) as test_client:
+        Base.metadata.create_all(test_client.app.state.db_engine)
         yield test_client
 
 

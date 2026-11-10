@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     )
     jwt_secret: str = "development-only-change-this-secret-32"
     jwt_expire_minutes: int = Field(default=720, ge=1, le=24 * 60)
+    auth_login_per_minute: int = Field(default=10, ge=1)
+    auth_recovery_question_per_minute: int = Field(default=5, ge=1)
+    auth_recovery_password_per_minute: int = Field(default=5, ge=1)
+    auth_recovery_password_window_seconds: int = Field(default=900, ge=60, le=3600)
     temp_root: Path = Path("./tmp")
     log_dir: Path = Path("./logs")
     log_file_name: str = "app.jsonl"

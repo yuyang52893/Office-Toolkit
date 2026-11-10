@@ -77,6 +77,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         window_seconds=runtime_settings.rate_limit_window_seconds,
         max_entries=runtime_settings.rate_limit_max_entries,
     )
+    app.state.auth_login_limiter = RateLimiter(
+        window_seconds=runtime_settings.rate_limit_window_seconds,
+        max_entries=runtime_settings.rate_limit_max_entries,
+    )
+    app.state.auth_recovery_question_limiter = RateLimiter(
+        window_seconds=runtime_settings.rate_limit_window_seconds,
+        max_entries=runtime_settings.rate_limit_max_entries,
+    )
+    app.state.auth_recovery_password_limiter = RateLimiter(
+        window_seconds=runtime_settings.auth_recovery_password_window_seconds,
+        max_entries=runtime_settings.rate_limit_max_entries,
+    )
     app.state.alerter = WebhookAlerter(runtime_settings)
     if cors_origins:
         app.add_middleware(
@@ -243,8 +255,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router, prefix=runtime_settings.api_prefix)
 
     try:
-        from app.routers import excel, qrcode
+        from app.routers import auth, excel, qrcode
 
+        app.include_router(auth.router, prefix=runtime_settings.api_prefix)
         app.include_router(excel.router, prefix=runtime_settings.api_prefix)
         app.include_router(excel.result_router, prefix=runtime_settings.api_prefix)
         app.include_router(qrcode.router, prefix=runtime_settings.api_prefix)
