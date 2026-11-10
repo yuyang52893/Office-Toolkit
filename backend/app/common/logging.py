@@ -114,20 +114,50 @@ class DailyCappedFileHandler(logging.Handler):
             payload = (self.format(record) + "\n").encode("utf-8")
             self._cleanup(preserve=path)
             current_size = path.stat().st_size
-            effective_max = min(self.max_bytes, self.total_max_bytes)
-            if current_size + len(payload) > effective_max:
-                if day not in self._cap_notified:
-                    self._cap_notified.add(day)
-                    sys.stderr.write(
-                        f"runtime error log capacity reached for {day.isoformat()}\n"
-                    )
-                    sys.stderr.flush()
+            projected_size = current_size + len(payload)
+            if projected_size > self.max_bytes or not self._make_total_room(
+                path,
+                projected_size,
+            ):
+                self._notify_capacity(day)
                 return
             assert self._stream is not None
             self._stream.write(payload)
             self._stream.flush()
         except Exception:
             self.handleError(record)
+
+    def _make_total_room(self, current_path: Path, projected_size: int) -> bool:
+        if projected_size > self.total_max_bytes:
+            return False
+
+        current = current_path.resolve()
+        dated_files: list[tuple[date, Path]] = []
+        for path in self.root.iterdir():
+            match = _RUNTIME_FILE_PATTERN.fullmatch(path.name)
+            if not match or not path.is_file() or path.resolve() == current:
+                continue
+            try:
+                day = date.fromisoformat(match.group(1))
+            except ValueError:
+                continue
+            dated_files.append((day, path))
+
+        other_size = sum(path.stat().st_size for _, path in dated_files)
+        for _, path in sorted(dated_files):
+            if other_size + projected_size <= self.total_max_bytes:
+                break
+            size = path.stat().st_size
+            path.unlink(missing_ok=True)
+            other_size -= size
+        return other_size + projected_size <= self.total_max_bytes
+
+    def _notify_capacity(self, day: date) -> None:
+        if day in self._cap_notified:
+            return
+        self._cap_notified.add(day)
+        sys.stderr.write(f"runtime error log capacity reached for {day.isoformat()}\n")
+        sys.stderr.flush()
 
     def _open_for_day(self, day: date):
         if self._stream is not None and self._stream_day == day:

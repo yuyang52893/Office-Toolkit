@@ -92,6 +92,26 @@ def test_runtime_log_total_cap_is_enforced_during_continuous_writes(tmp_path: Pa
     assert sum(path.stat().st_size for path in files) <= 2500
 
 
+def test_runtime_log_total_cap_includes_other_files_and_projected_record(tmp_path: Path):
+    current_day = datetime.now(SHANGHAI).date()
+    other = tmp_path / f"runtime-errors-{(current_day - timedelta(days=1)).isoformat()}.jsonl"
+    current = tmp_path / f"runtime-errors-{current_day.isoformat()}.jsonl"
+    other.write_bytes(b"o" * 400)
+    current.write_bytes(b"c" * 500)
+
+    handler = make_handler(
+        tmp_path,
+        max_bytes=4096,
+        total_max_bytes=1000,
+    )
+    logger = make_logger(handler)
+    logger.error("%s", "x" * 200)
+    handler.close()
+
+    files = list(tmp_path.glob("runtime-errors-*.jsonl"))
+    assert sum(path.stat().st_size for path in files) <= 1000
+
+
 def _add_admin(client: TestClient, username: str = "10000001") -> None:
     with client.app.state.db_session_factory() as session:
         session.add(
