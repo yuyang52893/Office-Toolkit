@@ -391,6 +391,30 @@ def test_logged_in_excel_result_is_added_to_history(client: TestClient):
     assert history_count(client) == 1
 
 
+def test_logged_in_excel_merge_result_is_added_to_history(client: TestClient):
+    upload = upload_files(
+        client,
+        [("销售.xlsx", make_xlsx_bytes(), "application/octet-stream")],
+    )
+    headers = authenticated_headers(client)
+    response = client.post(
+        "/api/v1/excel/merge",
+        headers=headers,
+        json={
+            "upload_id": upload["upload_id"],
+            "sheets": sheet_refs(upload),
+            "has_header": True,
+            "header_strategy": "by_name",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    history = response.json()["data"]["history"]
+    assert history["saved"] is True
+    assert history["history_id"]
+    assert history_count(client) == 1
+
+
 def test_anonymous_excel_result_is_not_added_to_history(client: TestClient):
     upload = upload_files(client, [("销售.xlsx", make_xlsx_bytes(), "application/octet-stream")])
     response = client.post(

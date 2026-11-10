@@ -1,5 +1,5 @@
 from dataclasses import asdict
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -32,27 +32,20 @@ async def split_excel(
     history: HistoryServiceDep,
 ):
     result = await run_in_threadpool(request.app.state.excel_service.split, payload)
-    if user is not None:
-        capture = history.capture_result_id(
-            user=user,
-            tool="excel",
-            operation=payload.mode,
-            result_id=result["result_id"],
-            temp_storage=request.app.state.storage,
-            summary={
-                "mode": payload.mode,
-                "has_header": payload.has_header,
-                "remove_empty_rows": payload.remove_empty_rows,
-                "remove_duplicates": payload.remove_duplicates,
-                "output_count": result["output_count"],
-            },
-            request_id=request.state.request_id,
-            ip=resolve_client_ip(
-                request,
-                trust_proxy_headers=request.app.state.settings.trust_proxy_headers,
-            ),
-        )
-        result["history"] = asdict(capture)
+    await _attach_history(
+        request,
+        user,
+        history,
+        result,
+        operation=payload.mode,
+        summary={
+            "mode": payload.mode,
+            "has_header": payload.has_header,
+            "remove_empty_rows": payload.remove_empty_rows,
+            "remove_duplicates": payload.remove_duplicates,
+            "output_count": result["output_count"],
+        },
+    )
     return success_response(request, result)
 
 
@@ -64,29 +57,50 @@ async def merge_excel(
     history: HistoryServiceDep,
 ):
     result = await run_in_threadpool(request.app.state.excel_service.merge, payload)
-    if user is not None:
-        capture = history.capture_result_id(
-            user=user,
-            tool="excel",
-            operation="merge",
-            result_id=result["result_id"],
-            temp_storage=request.app.state.storage,
-            summary={
-                "mode": "merge",
-                "has_header": payload.has_header,
-                "remove_empty_rows": payload.remove_empty_rows,
-                "remove_duplicates": payload.remove_duplicates,
-                "header_strategy": payload.header_strategy,
-                "row_count": result.get("row_count", 0),
-            },
-            request_id=request.state.request_id,
-            ip=resolve_client_ip(
-                request,
-                trust_proxy_headers=request.app.state.settings.trust_proxy_headers,
-            ),
-        )
-        result["history"] = asdict(capture)
+    await _attach_history(
+        request,
+        user,
+        history,
+        result,
+        operation="merge",
+        summary={
+            "mode": "merge",
+            "has_header": payload.has_header,
+            "remove_empty_rows": payload.remove_empty_rows,
+            "remove_duplicates": payload.remove_duplicates,
+            "header_strategy": payload.header_strategy,
+            "row_count": result.get("row_count", 0),
+        },
+    )
     return success_response(request, result)
+
+
+async def _attach_history(
+    request: Request,
+    user: Any,
+    history: Any,
+    result: dict[str, Any],
+    *,
+    operation: str,
+    summary: dict[str, Any],
+) -> None:
+    if user is None:
+        return
+    capture = await run_in_threadpool(
+        history.capture_result_id,
+        user=user,
+        tool="excel",
+        operation=operation,
+        result_id=result["result_id"],
+        temp_storage=request.app.state.storage,
+        summary=summary,
+        request_id=request.state.request_id,
+        ip=resolve_client_ip(
+            request,
+            trust_proxy_headers=request.app.state.settings.trust_proxy_headers,
+        ),
+    )
+    result["history"] = asdict(capture)
 
 
 @result_router.get("/results/{result_id}")

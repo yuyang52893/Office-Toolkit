@@ -1,4 +1,5 @@
 import io
+from urllib.parse import unquote
 
 from conftest import authenticated_headers, history_count
 from fastapi.testclient import TestClient
@@ -117,6 +118,40 @@ def test_logged_in_qrcode_result_returns_history_headers(client: TestClient):
     assert response.headers["X-History-Status"] == "saved"
     assert response.headers["X-History-Id"]
     assert history_count(client) == 1
+
+
+def test_logged_in_mac_result_returns_history_headers(client: TestClient):
+    headers = authenticated_headers(client)
+    response = client.post(
+        "/api/v1/qrcode/generate",
+        headers=headers,
+        json={"content": "aa-bb-cc-dd-ee-ff", "size": 128, "mode": "mac"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["X-MAC-Normalized"] == "AA:BB:CC:DD:EE:FF"
+    assert response.headers["X-History-Status"] == "saved"
+    assert response.headers["X-History-Id"]
+    assert history_count(client) == 1
+
+
+def test_qrcode_history_failure_returns_not_saved_headers(client: TestClient, monkeypatch):
+    headers = authenticated_headers(client)
+
+    def fail_history_write(**_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(client.app.state.history_storage, "write", fail_history_write)
+    response = client.post(
+        "/api/v1/qrcode/generate",
+        headers=headers,
+        json={"content": "history failure", "size": 128, "mode": "text"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["X-History-Status"] == "not_saved"
+    assert "仍可下载" in unquote(response.headers["X-History-Notice"])
+    assert history_count(client) == 0
 
 
 def test_anonymous_qrcode_and_logged_in_decode_do_not_save_decoded_text(client: TestClient):

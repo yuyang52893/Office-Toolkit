@@ -113,7 +113,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_credentials=False,
             allow_methods=["GET", "POST", "OPTIONS"],
             allow_headers=["Content-Type", "X-Request-ID"],
-            expose_headers=["X-Request-ID", "Retry-After"],
+            expose_headers=[
+                "X-Request-ID",
+                "Retry-After",
+                "X-History-Status",
+                "X-History-Id",
+                "X-History-Notice",
+                "X-MAC-Normalized",
+            ],
             max_age=600,
         )
 

@@ -3,6 +3,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import Response
+from starlette.concurrency import run_in_threadpool
 
 from app.common.rate_limit import resolve_client_ip
 from app.common.responses import success_response
@@ -21,7 +22,7 @@ async def generate_qrcode(
     history: HistoryServiceDep,
 ):
     service = request.app.state.qrcode_service
-    image, normalized_mac = service.generate(payload)
+    image, normalized_mac = await run_in_threadpool(service.generate, payload)
     headers = {
         "Cache-Control": "no-store",
         "Content-Disposition": 'inline; filename="qrcode.png"',
@@ -30,11 +31,13 @@ async def generate_qrcode(
         headers["X-MAC-Normalized"] = normalized_mac
     if user is not None:
         suffix = "mac-qrcode.png" if payload.mode == "mac" else "qrcode.png"
-        metadata, _path = request.app.state.storage.create_result(
+        metadata, _path = await run_in_threadpool(
+            request.app.state.storage.create_result,
             suffix,
             lambda target: target.write_bytes(image),
         )
-        capture = history.capture_result_id(
+        capture = await run_in_threadpool(
+            history.capture_result_id,
             user=user,
             tool="mac" if payload.mode == "mac" else "qrcode",
             operation="generate",

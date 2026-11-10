@@ -117,6 +117,18 @@ def test_cors_allows_only_configured_origin(test_settings):
         rejected = client.get("/api/v1/health", headers={"Origin": "https://evil.example"})
 
     assert allowed.headers["Access-Control-Allow-Origin"] == "https://allowed.example"
+    exposed = {
+        header.strip().lower()
+        for header in allowed.headers["Access-Control-Expose-Headers"].split(",")
+    }
+    assert {
+        "x-request-id",
+        "retry-after",
+        "x-history-status",
+        "x-history-id",
+        "x-history-notice",
+        "x-mac-normalized",
+    }.issubset(exposed)
     assert "Access-Control-Allow-Origin" not in rejected.headers
 
 

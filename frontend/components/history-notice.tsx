@@ -6,10 +6,16 @@ export function HistoryNotice({ capture }: { capture?: HistoryCapture | null }) 
     return null;
   }
   if (capture.saved) {
+    const notice = capture.notice?.trim();
+    const formattedNotice = notice
+      ? /[。！？.!?]$/.test(notice)
+        ? notice
+        : `${notice}。`
+      : "";
     return (
       <StatusBanner tone="success">
         已保存到个人历史。
-        {capture.notice ? ` ${capture.notice}。` : ""}
+        {formattedNotice ? ` ${formattedNotice}` : ""}
       </StatusBanner>
     );
   }
