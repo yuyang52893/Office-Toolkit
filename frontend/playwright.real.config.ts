@@ -48,6 +48,8 @@ export default defineConfig({
         LOG_DIR: "./tmp/e2e-real/logs",
         RUNTIME_LOG_DIR: "./tmp/e2e-real/logs/runtime-errors",
         CLEANUP_INTERVAL_SECONDS: "3600",
+        RATE_LIMIT_PER_MINUTE: "1000",
+        EXCEL_RATE_LIMIT_PER_MINUTE: "1000",
         E2E_BACKEND_PORT: "8000",
       }),
     },

@@ -15,7 +15,7 @@ backend/htmlcov/
 backend/tmp/
 backend/logs/
 backend/history/
-logs/
+/logs/
 
 # Python
 __pycache__/
