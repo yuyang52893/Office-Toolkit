@@ -26,6 +26,10 @@ class User(Base):
     __table_args__ = (
         CheckConstraint("role IN ('user', 'admin')", name="ck_users_role"),
         CheckConstraint(
+            "username REGEXP '^[0-9]{8,18}$'",
+            name="ck_users_username_format",
+        ),
+        CheckConstraint(
             "session_version >= 0",
             name="ck_users_session_version",
         ),

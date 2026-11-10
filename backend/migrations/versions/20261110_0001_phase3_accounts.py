@@ -46,6 +46,10 @@ def upgrade() -> None:
             name="ck_users_role",
         ),
         sa.CheckConstraint(
+            "username REGEXP '^[0-9]{8,18}$'",
+            name="ck_users_username_format",
+        ),
+        sa.CheckConstraint(
             "session_version >= 0",
             name="ck_users_session_version",
         ),

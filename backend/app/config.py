@@ -1,7 +1,7 @@
 from pathlib import Path
 from urllib.parse import urlparse
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     excel_concurrency: int = Field(default=2, ge=1, le=8)
     qr_max_mb: int = Field(default=10, ge=1, le=100)
     qr_max_pixels: int = Field(default=40_000_000, ge=1_000_000, le=200_000_000)
+
+    @model_validator(mode="after")
+    def reject_insecure_production_secrets(self) -> "Settings":
+        if self.app_env != "production":
+            return self
+        if "office_tools_dev" in self.database_url:
+            raise ValueError("生产环境必须使用独立数据库连接信息")
+        if self.jwt_secret.startswith("development-only") or len(self.jwt_secret) < 32:
+            raise ValueError("生产环境必须配置至少 32 个字符的独立 JWT_SECRET")
+        return self
 
     @property
     def max_file_bytes(self) -> int:
