@@ -78,6 +78,21 @@ export type LoginResult = {
   user: AuthUser;
 };
 
+export type HistoryItem = {
+  id: string;
+  tool: string;
+  operation: string;
+  result_filename: string;
+  size_bytes: number;
+  summary: Record<string, unknown>;
+  status: "active" | "expired";
+  completed_at: string;
+  expires_at: string;
+  expired_at: string | null;
+  expire_reason: "timeout" | "quota_count" | "quota_size" | null;
+  purge_after: string | null;
+};
+
 export type ApiErrorBody = {
   success: false;
   data: null;

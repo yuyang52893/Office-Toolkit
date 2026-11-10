@@ -6,6 +6,7 @@ import type {
   ApiErrorBody,
   ApiSuccess,
   AuthUser,
+  HistoryItem,
   LoginResult,
 } from "@/lib/types";
 
@@ -45,6 +46,23 @@ async function readJson<T>(response: Response): Promise<T> {
     );
   }
   return body.data;
+}
+
+async function throwResponseError(response: Response): Promise<never> {
+  try {
+    const body = (await response.json()) as ApiErrorBody;
+    throw new ApiError(
+      body.error?.message ?? "请求失败，请稍后重试",
+      body.error?.code ?? "REQUEST_FAILED",
+      response.status,
+      body.error?.details,
+    );
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError("请求失败，请稍后重试", "REQUEST_FAILED", response.status);
+  }
 }
 
 export async function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Response> {
@@ -122,4 +140,21 @@ export async function changePassword(payload: ChangePasswordPayload): Promise<st
     }),
   );
   return data.access_token;
+}
+
+export async function listHistory(): Promise<HistoryItem[]> {
+  const data = await readJson<{ items: HistoryItem[] }>(
+    await authenticatedFetch("/api/v1/history"),
+  );
+  return data.items;
+}
+
+export async function downloadHistoryFile(historyId: string): Promise<Blob> {
+  const response = await authenticatedFetch(
+    `/api/v1/history/${encodeURIComponent(historyId)}/download`,
+  );
+  if (!response.ok) {
+    return throwResponseError(response);
+  }
+  return response.blob();
 }
