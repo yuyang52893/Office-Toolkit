@@ -355,7 +355,7 @@ export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
             ) : null}
           </section>
 
-          <section className="surface-card fade-up rounded-2xl p-5 sm:p-7" style={{ animationDelay: "70ms" }}>
+          <section className="surface-card fade-up rounded-2xl p-5 [animation-delay:70ms] sm:p-7">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-black tracking-tight text-slate-950">预览与下载</h2>
@@ -500,7 +500,7 @@ export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
             ) : null}
           </section>
 
-          <section className="surface-card fade-up rounded-2xl p-5 sm:p-7" style={{ animationDelay: "70ms" }}>
+          <section className="surface-card fade-up rounded-2xl p-5 [animation-delay:70ms] sm:p-7">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-black tracking-tight text-slate-950">识别结果</h2>

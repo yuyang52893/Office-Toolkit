@@ -206,8 +206,13 @@ async function qrBlob(content: string, size: number): Promise<Blob> {
     errorCorrectionLevel: "M",
     color: { dark: "#000000", light: "#ffffff" },
   });
-  const response = await fetch(dataUrl);
-  return response.blob();
+  const separator = dataUrl.indexOf(",");
+  const metadata = dataUrl.slice(0, separator);
+  const encoded = dataUrl.slice(separator + 1);
+  const mimeType = metadata.match(/^data:([^;]+)/)?.[1] ?? "application/octet-stream";
+  const binary = atob(encoded);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new Blob([bytes], { type: mimeType });
 }
 
 export async function generateDemoQrCode(

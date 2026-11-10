@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { connection } from "next/server";
 
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -17,7 +18,9 @@ export const metadata: Metadata = {
     "在线拆分合并 Excel、XLS、CSV，生成和解析二维码，转换 MAC 地址格式。免登录，文件自动清理。",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+  await connection();
+
   return (
     <html lang="zh-CN" data-scroll-behavior="smooth">
       <body>

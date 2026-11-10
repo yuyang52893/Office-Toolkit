@@ -39,6 +39,7 @@ services:
       TEMP_ROOT: /data/tmp
       LOG_DIR: /data/logs
       RUNTIME_LOG_DIR: /data/logs/runtime-errors
+      HISTORY_ROOT: /data/history
       TRUST_PROXY_HEADERS: "true"
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
       EXCEL_RATE_LIMIT_PER_MINUTE: ${EXCEL_RATE_LIMIT_PER_MINUTE:-10}
@@ -52,6 +53,7 @@ services:
     volumes:
       - office-temp:/data/tmp
       - office-logs:/data/logs
+      - office-history:/data/history
     expose:
       - "8000"
     command:
@@ -104,4 +106,5 @@ services:
 volumes:
   office-temp:
   office-logs:
+  office-history:
   mysql-data:
