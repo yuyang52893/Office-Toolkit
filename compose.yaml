@@ -3,8 +3,8 @@ name: office-tools
 x-logging: &default-logging
   driver: json-file
   options:
-    max-size: "10m"
-    max-file: "7"
+    max-size: "5m"
+    max-file: "3"
 
 services:
   mysql:
@@ -38,6 +38,7 @@ services:
       APP_ENV: production
       TEMP_ROOT: /data/tmp
       LOG_DIR: /data/logs
+      RUNTIME_LOG_DIR: /data/logs/runtime-errors
       TRUST_PROXY_HEADERS: "true"
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
       EXCEL_RATE_LIMIT_PER_MINUTE: ${EXCEL_RATE_LIMIT_PER_MINUTE:-10}

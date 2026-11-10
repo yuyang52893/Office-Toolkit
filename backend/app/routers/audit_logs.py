@@ -5,7 +5,7 @@ from datetime import date
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.common.rate_limit import resolve_client_ip
@@ -13,8 +13,10 @@ from app.common.responses import success_response
 from app.db.models import User
 from app.dependencies.auth import DbSession, require_admin
 from app.services.audit import AuditService
+from app.services.runtime_logs import RuntimeLogService
 
 router = APIRouter(prefix="/admin/audit-logs", tags=["admin"])
+runtime_router = APIRouter(prefix="/admin/runtime-errors", tags=["admin"])
 Admin = Annotated[User, Depends(require_admin)]
 
 
@@ -180,4 +182,52 @@ def download_logs(
         json_stream(),
         media_type="application/json; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="audit-{suffix}.json"'},
+    )
+
+
+@runtime_router.get("")
+def list_runtime_errors(
+    request: Request,
+    session: DbSession,
+    _admin: Admin,
+    date: Annotated[date, Query()],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 50,
+):
+    data = RuntimeLogService(request.app.state.settings).list_errors(
+        date,
+        page=page,
+        page_size=page_size,
+    )
+    _record(
+        request,
+        session,
+        event="admin.runtime_errors.list.success",
+        outcome="success",
+        actor_user_id=_admin.id,
+        details={"date": date.isoformat(), "page": page, "page_size": page_size},
+    )
+    return success_response(request, data)
+
+
+@runtime_router.get("/download")
+def download_runtime_errors(
+    request: Request,
+    session: DbSession,
+    _admin: Admin,
+    date: Annotated[date, Query()],
+):
+    path = RuntimeLogService(request.app.state.settings).resolve_download(date)
+    _record(
+        request,
+        session,
+        event="admin.runtime_errors.download.success",
+        outcome="success",
+        actor_user_id=_admin.id,
+        details={"date": date.isoformat()},
+    )
+    return FileResponse(
+        path,
+        media_type="application/x-ndjson",
+        filename=path.name,
     )

@@ -37,6 +37,13 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1024)
     log_backup_count: int = Field(default=7, ge=1, le=100)
+    runtime_log_dir: Path = Path("./logs/runtime-errors")
+    runtime_log_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
+    runtime_log_retention_days: int = Field(default=14, ge=1, le=90)
+    runtime_log_total_bytes: int = Field(
+        default=64 * 1024 * 1024,
+        ge=1024,
+    )
     trust_proxy_headers: bool = False
     rate_limit_per_minute: int = Field(default=60, ge=1)
     excel_rate_limit_per_minute: int = Field(default=10, ge=1)

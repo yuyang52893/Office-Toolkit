@@ -1,18 +1,20 @@
 import json
-import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.common.logging import configure_logging
 from app.common.rate_limit import RateLimiter
 from app.config import Settings
 from app.main import create_app
 
 
-def test_request_log_contains_trace_data_without_query_string(monkeypatch, tmp_path: Path):
+def test_request_log_contains_trace_data_without_query_string(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+):
     monkeypatch.chdir(tmp_path)
     settings = Settings(
         app_env="test",
@@ -27,8 +29,8 @@ def test_request_log_contains_trace_data_without_query_string(monkeypatch, tmp_p
         )
 
     assert response.status_code == 200
-    log_text = (tmp_path / "logs" / "app.jsonl").read_text(encoding="utf-8")
-    records = [json.loads(line) for line in log_text.splitlines()]
+    log_text = capsys.readouterr().out
+    records = [json.loads(line) for line in log_text.splitlines() if line.startswith("{")]
     request_log = next(record for record in records if record["event"] == "http_request")
 
     assert request_log["request_id"] == "trace-123"
@@ -40,7 +42,11 @@ def test_request_log_contains_trace_data_without_query_string(monkeypatch, tmp_p
     assert "super-secret" not in log_text
 
 
-def test_trusted_proxy_ip_is_used_for_request_logging(monkeypatch, tmp_path: Path):
+def test_trusted_proxy_ip_is_used_for_request_logging(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+):
     monkeypatch.chdir(tmp_path)
     settings = Settings(
         app_env="test",
@@ -52,32 +58,10 @@ def test_trusted_proxy_ip_is_used_for_request_logging(monkeypatch, tmp_path: Pat
         response = client.get("/api/v1/health", headers={"X-Real-IP": "203.0.113.10"})
 
     assert response.status_code == 200
-    records = [
-        json.loads(line)
-        for line in (tmp_path / "logs" / "app.jsonl").read_text(encoding="utf-8").splitlines()
-    ]
+    output = capsys.readouterr().out
+    records = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
     request_log = next(record for record in records if record["event"] == "http_request")
     assert request_log["client_ip"] == "203.0.113.10"
-
-
-def test_file_log_rotates_after_reaching_size_limit(monkeypatch, tmp_path: Path):
-    monkeypatch.chdir(tmp_path)
-    settings = Settings(
-        app_env="test",
-        temp_root=tmp_path / "storage",
-        log_max_bytes=1024,
-        log_backup_count=2,
-    )
-    configure_logging(settings)
-    logger = logging.getLogger("rotation-test")
-
-    for index in range(30):
-        logger.info("rotation-%s-%s", index, "x" * 80)
-    logging.shutdown()
-
-    assert (tmp_path / "logs" / "app.jsonl").is_file()
-    assert (tmp_path / "logs" / "app.jsonl.1").is_file()
-
 
 def test_general_api_rate_limit_returns_retry_after(test_settings):
     settings = test_settings.model_copy(update={"rate_limit_per_minute": 1})

@@ -1,13 +1,17 @@
 import json
 import logging
+import re
 import sys
-from datetime import UTC, datetime
-from logging.handlers import RotatingFileHandler
+from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from app.config import Settings
 
 _STANDARD_RECORD_FIELDS = set(logging.makeLogRecord({}).__dict__)
+_RUNTIME_FILE_PATTERN = re.compile(r"^runtime-errors-(\d{4}-\d{2}-\d{2})\.jsonl$")
+_LOCAL_TIMEZONE = timezone(timedelta(hours=8))
 
 
 class JsonFormatter(logging.Formatter):
@@ -31,18 +35,133 @@ def _json_handler(handler: logging.Handler) -> logging.Handler:
     return handler
 
 
+def _runtime_path(root: Path, day: date) -> Path:
+    return root / f"runtime-errors-{day.isoformat()}.jsonl"
+
+
+def cleanup_runtime_logs(
+    root: Path,
+    *,
+    now: datetime,
+    retention_days: int,
+    total_max_bytes: int,
+) -> int:
+    if not root.is_dir():
+        return 0
+
+    dated_files: list[tuple[date, Path]] = []
+    for path in root.iterdir():
+        match = _RUNTIME_FILE_PATTERN.fullmatch(path.name)
+        if not match or not path.is_file():
+            continue
+        try:
+            day = date.fromisoformat(match.group(1))
+        except ValueError:
+            continue
+        dated_files.append((day, path))
+
+    cutoff = now.astimezone(_LOCAL_TIMEZONE).date() - timedelta(days=retention_days - 1)
+    removed = 0
+    for day, path in sorted(dated_files):
+        if day < cutoff:
+            path.unlink(missing_ok=True)
+            removed += 1
+
+    remaining = [(day, path) for day, path in sorted(dated_files) if path.exists()]
+    total_size = sum(path.stat().st_size for _, path in remaining)
+    for _, path in remaining:
+        if total_size <= total_max_bytes:
+            break
+        size = path.stat().st_size
+        path.unlink(missing_ok=True)
+        total_size -= size
+        removed += 1
+    return removed
+
+
+class DailyCappedFileHandler(logging.Handler):
+    def __init__(
+        self,
+        root: Path,
+        *,
+        max_bytes: int,
+        retention_days: int,
+        total_max_bytes: int,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
+        super().__init__(level=logging.WARNING)
+        self.root = root
+        self.max_bytes = max_bytes
+        self.retention_days = retention_days
+        self.total_max_bytes = total_max_bytes
+        self.clock = clock or (lambda: datetime.now(_LOCAL_TIMEZONE))
+        self._stream = None
+        self._stream_day: date | None = None
+        self._cap_notified: set[date] = set()
+        root.mkdir(parents=True, exist_ok=True)
+        self._cleanup()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.levelno < logging.WARNING:
+            return
+        try:
+            day = datetime.fromtimestamp(record.created, _LOCAL_TIMEZONE).date()
+            path = self._open_for_day(day)
+            payload = (self.format(record) + "\n").encode("utf-8")
+            current_size = path.stat().st_size
+            if current_size + len(payload) > self.max_bytes:
+                if day not in self._cap_notified:
+                    self._cap_notified.add(day)
+                    sys.stderr.write(
+                        f"runtime error log daily cap reached for {day.isoformat()}\n"
+                    )
+                    sys.stderr.flush()
+                return
+            assert self._stream is not None
+            self._stream.write(payload)
+            self._stream.flush()
+        except Exception:
+            self.handleError(record)
+
+    def _open_for_day(self, day: date):
+        if self._stream is not None and self._stream_day == day:
+            return _runtime_path(self.root, day)
+        if self._stream is not None:
+            self._stream.close()
+        path = _runtime_path(self.root, day)
+        self._stream = path.open("ab")
+        self._stream_day = day
+        self._cleanup()
+        return path
+
+    def _cleanup(self) -> None:
+        cleanup_runtime_logs(
+            self.root,
+            now=self.clock(),
+            retention_days=self.retention_days,
+            total_max_bytes=self.total_max_bytes,
+        )
+
+    def close(self) -> None:
+        if self._stream is not None:
+            self._stream.close()
+            self._stream = None
+            self._stream_day = None
+        super().close()
+
+
 def configure_logging(settings: Settings) -> None:
-    settings.log_dir.mkdir(parents=True, exist_ok=True)
+    settings.runtime_log_dir.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         level=settings.log_level.upper(),
         handlers=[
             _json_handler(logging.StreamHandler(sys.stdout)),
             _json_handler(
-                RotatingFileHandler(
-                    settings.log_path,
-                    maxBytes=settings.log_max_bytes,
-                    backupCount=settings.log_backup_count,
-                    encoding="utf-8",
+                DailyCappedFileHandler(
+                    settings.runtime_log_dir,
+                    max_bytes=settings.runtime_log_max_bytes,
+                    retention_days=settings.runtime_log_retention_days,
+                    total_max_bytes=settings.runtime_log_total_bytes,
                 )
             ),
         ],
