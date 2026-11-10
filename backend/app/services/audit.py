@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.common.errors import AppError
+from app.common.time import format_utc
 from app.db.models import AuditLog, User, utc_now
 from app.repositories import audit as audit_repository
 
@@ -206,5 +207,5 @@ class AuditService:
             "target_username": target_username,
             "ip": log.ip,
             "details": log.details,
-            "created_at": log.created_at.isoformat(),
+            "created_at": format_utc(log.created_at),
         }

@@ -72,9 +72,18 @@ class Settings(BaseSettings):
     def reject_insecure_production_secrets(self) -> "Settings":
         if self.app_env != "production":
             return self
-        if "office_tools_dev" in self.database_url:
+        secret_material = f"{self.database_url}\n{self.jwt_secret}".lower()
+        insecure_markers = (
+            "office_tools_dev",
+            "development-only",
+            "replace-with",
+            "change-me",
+            "changeme",
+            "example-password",
+        )
+        if any(marker in secret_material for marker in insecure_markers):
             raise ValueError("生产环境必须使用独立数据库连接信息")
-        if self.jwt_secret.startswith("development-only") or len(self.jwt_secret) < 32:
+        if len(self.jwt_secret) < 32:
             raise ValueError("生产环境必须配置至少 32 个字符的独立 JWT_SECRET")
         return self
 

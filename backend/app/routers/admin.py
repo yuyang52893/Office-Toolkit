@@ -92,34 +92,35 @@ def update_status(
     session: DbSession,
     _admin: AdminUser,
 ):
-    try:
-        user = admin_service.set_status(
-            session,
-            user_id,
-            payload.is_active,
-            commit=False,
-        )
-    except Exception:
-        session.rollback()
-        _record_best_effort(
+    with admin_service.mutation_lock():
+        try:
+            user = admin_service.set_status(
+                session,
+                user_id,
+                payload.is_active,
+                commit=False,
+            )
+        except Exception:
+            session.rollback()
+            _record_best_effort(
+                request,
+                session,
+                event="admin.user.status.failure",
+                outcome="failure",
+                actor_user_id=_admin.id,
+                target_user_id=user_id,
+                details={"is_active": payload.is_active},
+            )
+            raise
+        _record(
             request,
             session,
-            event="admin.user.status.failure",
-            outcome="failure",
+            event="admin.user.status.success",
+            outcome="success",
             actor_user_id=_admin.id,
             target_user_id=user_id,
             details={"is_active": payload.is_active},
         )
-        raise
-    _record(
-        request,
-        session,
-        event="admin.user.status.success",
-        outcome="success",
-        actor_user_id=_admin.id,
-        target_user_id=user_id,
-        details={"is_active": payload.is_active},
-    )
     return success_response(request, admin_service.public_user(user))
 
 
@@ -131,34 +132,35 @@ def update_role(
     session: DbSession,
     _admin: AdminUser,
 ):
-    try:
-        user = admin_service.set_role(
-            session,
-            user_id,
-            payload.role,
-            commit=False,
-        )
-    except Exception:
-        session.rollback()
-        _record_best_effort(
+    with admin_service.mutation_lock():
+        try:
+            user = admin_service.set_role(
+                session,
+                user_id,
+                payload.role,
+                commit=False,
+            )
+        except Exception:
+            session.rollback()
+            _record_best_effort(
+                request,
+                session,
+                event="admin.user.role.failure",
+                outcome="failure",
+                actor_user_id=_admin.id,
+                target_user_id=user_id,
+                details={"to_role": payload.role},
+            )
+            raise
+        _record(
             request,
             session,
-            event="admin.user.role.failure",
-            outcome="failure",
+            event="admin.user.role.success",
+            outcome="success",
             actor_user_id=_admin.id,
             target_user_id=user_id,
             details={"to_role": payload.role},
         )
-        raise
-    _record(
-        request,
-        session,
-        event="admin.user.role.success",
-        outcome="success",
-        actor_user_id=_admin.id,
-        target_user_id=user_id,
-        details={"to_role": payload.role},
-    )
     return success_response(request, admin_service.public_user(user))
 
 

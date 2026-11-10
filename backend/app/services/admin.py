@@ -14,7 +14,7 @@ from app.services import auth as auth_service
 
 class AdminMutationLock:
     def __init__(self) -> None:
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def __enter__(self) -> "AdminMutationLock":
         self._lock.acquire()
@@ -25,6 +25,10 @@ class AdminMutationLock:
 
 
 _admin_mutation_lock = AdminMutationLock()
+
+
+def mutation_lock() -> AdminMutationLock:
+    return _admin_mutation_lock
 
 
 def public_user(user: User) -> dict:

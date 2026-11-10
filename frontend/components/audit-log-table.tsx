@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { StatusBanner } from "@/components/status-banner";
 import { downloadAuditLogs, listAuditLogs, type AuditLogFilters } from "@/lib/auth-api";
-import { getErrorMessage } from "@/lib/format";
+import { formatDateTime, getErrorMessage } from "@/lib/format";
 import type { AuditLogItem } from "@/lib/types";
 
 function saveBlob(blob: Blob, filename: string) {
@@ -198,7 +198,7 @@ export function AuditLogTable() {
                   >
                     {item.outcome === "success" ? "成功" : "失败"}
                   </span>
-                  <span className="text-slate-400">{item.created_at}</span>
+                  <span className="text-slate-400">{formatDateTime(item.created_at)}</span>
                 </div>
                 <p className="mt-2 text-slate-500">
                   操作人 {item.actor_username ?? "—"} · 目标 {item.target_username ?? "—"} · IP {item.ip}

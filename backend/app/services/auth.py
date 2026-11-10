@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.common.errors import AppError
+from app.common.time import format_utc
 from app.config import Settings
 from app.db.models import User, utc_now
 from app.repositories import users
@@ -37,8 +38,8 @@ def public_user(user: User) -> dict:
         "role": user.role,
         "is_active": user.is_active,
         "must_change_password": user.must_change_password,
-        "created_at": user.created_at,
-        "last_login_at": user.last_login_at,
+        "created_at": format_utc(user.created_at),
+        "last_login_at": format_utc(user.last_login_at),
     }
 
 

@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_serializer
+
+from app.common.time import format_utc
 
 
 class HistoryItem(BaseModel):
@@ -19,3 +21,13 @@ class HistoryItem(BaseModel):
     expired_at: datetime | None
     expire_reason: str | None
     purge_after: datetime | None
+
+    @field_serializer(
+        "completed_at",
+        "expires_at",
+        "expired_at",
+        "purge_after",
+        when_used="json",
+    )
+    def serialize_utc(self, value: datetime | None) -> str | None:
+        return format_utc(value)
