@@ -27,6 +27,30 @@ def _record(
     target_user_id: int | None = None,
     details: dict | None = None,
 ) -> None:
+    AuditService(session).record(
+        event=event,
+        outcome=outcome,
+        request_id=request.state.request_id,
+        actor_user_id=actor_user_id,
+        target_user_id=target_user_id,
+        ip=resolve_client_ip(
+            request,
+            trust_proxy_headers=request.app.state.settings.trust_proxy_headers,
+        ),
+        details=details,
+    )
+
+
+def _record_best_effort(
+    request: Request,
+    session: Session,
+    *,
+    event: str,
+    outcome: str,
+    actor_user_id: int | None,
+    target_user_id: int | None = None,
+    details: dict | None = None,
+) -> None:
     try:
         AuditService(session).record(
             event=event,
@@ -69,9 +93,15 @@ def update_status(
     _admin: AdminUser,
 ):
     try:
-        user = admin_service.set_status(session, user_id, payload.is_active)
+        user = admin_service.set_status(
+            session,
+            user_id,
+            payload.is_active,
+            commit=False,
+        )
     except Exception:
-        _record(
+        session.rollback()
+        _record_best_effort(
             request,
             session,
             event="admin.user.status.failure",
@@ -102,9 +132,15 @@ def update_role(
     _admin: AdminUser,
 ):
     try:
-        user = admin_service.set_role(session, user_id, payload.role)
+        user = admin_service.set_role(
+            session,
+            user_id,
+            payload.role,
+            commit=False,
+        )
     except Exception:
-        _record(
+        session.rollback()
+        _record_best_effort(
             request,
             session,
             event="admin.user.role.failure",
@@ -133,7 +169,20 @@ def force_logout(
     session: DbSession,
     _admin: AdminUser,
 ):
-    user = admin_service.force_logout(session, user_id)
+    try:
+        user = admin_service.force_logout(session, user_id, commit=False)
+    except Exception:
+        session.rollback()
+        _record_best_effort(
+            request,
+            session,
+            event="admin.user.force_logout.failure",
+            outcome="failure",
+            actor_user_id=_admin.id,
+            target_user_id=user_id,
+            details={"reason": "user_not_found_or_mutation_failed"},
+        )
+        raise
     _record(
         request,
         session,
@@ -152,7 +201,24 @@ def reset_password(
     session: DbSession,
     _admin: AdminUser,
 ):
-    temporary_password, user = admin_service.reset_password(session, user_id)
+    try:
+        temporary_password, user = admin_service.reset_password(
+            session,
+            user_id,
+            commit=False,
+        )
+    except Exception:
+        session.rollback()
+        _record_best_effort(
+            request,
+            session,
+            event="admin.user.reset_password.failure",
+            outcome="failure",
+            actor_user_id=_admin.id,
+            target_user_id=user_id,
+            details={"reason": "user_not_found_or_reset_failed"},
+        )
+        raise
     _record(
         request,
         session,

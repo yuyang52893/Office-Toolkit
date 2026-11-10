@@ -1,11 +1,11 @@
 import csv
 import io
 import json
-import logging
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.common.rate_limit import resolve_client_ip
@@ -14,7 +14,6 @@ from app.db.models import User
 from app.dependencies.auth import DbSession, require_admin
 from app.services.audit import AuditService
 
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/audit-logs", tags=["admin"])
 Admin = Annotated[User, Depends(require_admin)]
 
@@ -36,18 +35,15 @@ def _record(
     target_user_id: int | None = None,
     details: dict | None = None,
 ) -> None:
-    try:
-        AuditService(session).record(
-            event=event,
-            outcome=outcome,
-            request_id=request.state.request_id,
-            actor_user_id=actor_user_id,
-            target_user_id=target_user_id,
-            ip=_client_ip(request),
-            details=details,
-        )
-    except Exception:
-        logger.warning("Audit event recording failed", exc_info=True)
+    AuditService(session).record(
+        event=event,
+        outcome=outcome,
+        request_id=request.state.request_id,
+        actor_user_id=actor_user_id,
+        target_user_id=target_user_id,
+        ip=_client_ip(request),
+        details=details,
+    )
 
 
 @router.get("")
@@ -93,17 +89,8 @@ def download_logs(
     outcome: Annotated[str | None, Query()] = None,
     request_id: Annotated[str | None, Query(max_length=64)] = None,
     username: Annotated[str | None, Query(max_length=18)] = None,
-    format: Annotated[str, Query()] = "json",
+    format: Annotated[Literal["json", "csv"], Query()] = "json",
 ):
-    data = AuditService(session).list_logs(
-        day=date,
-        event=event,
-        outcome=outcome,
-        request_id=request_id,
-        username=username,
-        page=1,
-        page_size=100,
-    )
     _record(
         request,
         session,
@@ -113,11 +100,23 @@ def download_logs(
         details={"date": str(date) if date else None, "format": format},
     )
     suffix = date.isoformat() if date else "all"
+
+    def serialize_csv_row(item: dict) -> list[str]:
+        return [
+            item["id"],
+            item["created_at"],
+            item["request_id"],
+            item["event"],
+            item["outcome"],
+            item["actor_username"],
+            item["target_username"],
+            item["ip"],
+            json.dumps(item["details"], ensure_ascii=False),
+        ]
+
     if format == "csv":
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(
-            [
+        def csv_rows():
+            yield [
                 "id",
                 "created_at",
                 "request_id",
@@ -128,29 +127,49 @@ def download_logs(
                 "ip",
                 "details",
             ]
-        )
-        for item in data["items"]:
-            writer.writerow(
-                [
-                    item["id"],
-                    item["created_at"],
-                    item["request_id"],
-                    item["event"],
-                    item["outcome"],
-                    item["actor_username"],
-                    item["target_username"],
-                    item["ip"],
-                    json.dumps(item["details"], ensure_ascii=False),
-                ]
-            )
-        return Response(
-            content=output.getvalue(),
+            for item in AuditService(session).iter_logs(
+                day=date,
+                event=event,
+                outcome=outcome,
+                request_id=request_id,
+                username=username,
+            ):
+                yield serialize_csv_row(item)
+
+        def csv_stream():
+            yield "\ufeff"
+            buffer = io.StringIO()
+            writer = csv.writer(buffer)
+            for row in csv_rows():
+                buffer.seek(0)
+                buffer.truncate(0)
+                writer.writerow(row)
+                yield buffer.getvalue()
+
+        return StreamingResponse(
+            csv_stream(),
             media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition": f'attachment; filename="audit-{suffix}.csv"'},
         )
 
-    return Response(
-        content=json.dumps(data["items"], ensure_ascii=False),
-        media_type="application/json",
+    def json_stream():
+        yield "["
+        first = True
+        for item in AuditService(session).iter_logs(
+            day=date,
+            event=event,
+            outcome=outcome,
+            request_id=request_id,
+            username=username,
+        ):
+            if not first:
+                yield ","
+            yield json.dumps(item, ensure_ascii=False)
+            first = False
+        yield "]"
+
+    return StreamingResponse(
+        json_stream(),
+        media_type="application/json; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="audit-{suffix}.json"'},
     )

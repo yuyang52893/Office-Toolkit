@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Iterator
 from datetime import UTC, date, datetime, time, timedelta, timezone
 
 from sqlalchemy import select
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 _SHANGHAI = timezone(timedelta(hours=8), "Asia/Shanghai")
 _RETENTION_DAYS = 30
+_EXPORT_MAX_ROWS = 100_000
 _ALLOWED_DETAIL_KEYS = {
     "date",
     "format",
@@ -39,6 +41,7 @@ class AuditService:
         target_user_id: int | None,
         ip: str,
         details: dict | None = None,
+        commit: bool = True,
     ) -> AuditLog:
         log = AuditLog(
             request_id=request_id,
@@ -51,7 +54,8 @@ class AuditService:
             created_at=utc_now(),
         )
         audit_repository.add_log(self.session, log)
-        self.session.commit()
+        if commit:
+            self.session.commit()
         return log
 
     def list_logs(
@@ -93,6 +97,39 @@ class AuditService:
             "page": page,
             "page_size": page_size,
         }
+
+    def iter_logs(
+        self,
+        *,
+        day: date | None,
+        event: str | None,
+        outcome: str | None,
+        request_id: str | None,
+        username: str | None,
+    ) -> Iterator[dict]:
+        page = 1
+        page_size = 100
+        while True:
+            data = self.list_logs(
+                day=day,
+                event=event,
+                outcome=outcome,
+                request_id=request_id,
+                username=username,
+                page=page,
+                page_size=page_size,
+            )
+            total = data["total"]
+            if total > _EXPORT_MAX_ROWS:
+                raise AppError(
+                    "EXPORT_TOO_LARGE",
+                    f"一次最多导出 {_EXPORT_MAX_ROWS} 条审计日志，请缩小筛选范围",
+                    status_code=413,
+                )
+            yield from data["items"]
+            if page * page_size >= total:
+                return
+            page += 1
 
     def purge_expired(self, now: datetime) -> int:
         now_utc = now if now.tzinfo is not None else now.replace(tzinfo=UTC)

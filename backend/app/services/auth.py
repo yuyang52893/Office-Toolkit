@@ -42,7 +42,7 @@ def public_user(user: User) -> dict:
     }
 
 
-def register(session: Session, payload: RegisterRequest) -> User:
+def register(session: Session, payload: RegisterRequest, *, commit: bool = True) -> User:
     if users.get_by_username(session, payload.username) is not None:
         raise AppError("USERNAME_TAKEN", "该用户名已被使用", status_code=409)
 
@@ -62,14 +62,21 @@ def register(session: Session, payload: RegisterRequest) -> User:
                 must_change_password=False,
             ),
         )
-        session.commit()
+        if commit:
+            session.commit()
     except IntegrityError as exc:
         session.rollback()
         raise AppError("USERNAME_TAKEN", "该用户名已被使用", status_code=409) from exc
     return user
 
 
-def login(session: Session, payload: LoginRequest, settings: Settings) -> tuple[str, User]:
+def login(
+    session: Session,
+    payload: LoginRequest,
+    settings: Settings,
+    *,
+    commit: bool = True,
+) -> tuple[str, User]:
     user = users.get_by_username(session, payload.username)
     password_hash = user.password_hash if user is not None else _DUMMY_PASSWORD_HASH
     password_matches = verify_password(payload.password, password_hash)
@@ -81,7 +88,8 @@ def login(session: Session, payload: LoginRequest, settings: Settings) -> tuple[
         raise AppError("INVALID_CREDENTIALS", "用户名或密码错误", status_code=401)
 
     user.last_login_at = utc_now()
-    session.commit()
+    if commit:
+        session.commit()
     return create_access_token(user.id, user.role, user.session_version, settings), user
 
 
@@ -90,7 +98,12 @@ def recovery_question(session: Session, payload: RecoveryQuestionRequest) -> str
     return _RECOVERY_PROMPT
 
 
-def reset_password(session: Session, payload: ResetPasswordRequest) -> None:
+def reset_password(
+    session: Session,
+    payload: ResetPasswordRequest,
+    *,
+    commit: bool = True,
+) -> None:
     user = users.get_by_username(session, payload.username)
     question_matches = (
         user is not None
@@ -109,7 +122,8 @@ def reset_password(session: Session, payload: ResetPasswordRequest) -> None:
     user.password_hash = hash_password(payload.new_password)
     user.session_version += 1
     user.must_change_password = False
-    session.commit()
+    if commit:
+        session.commit()
 
 
 def change_password(
@@ -117,6 +131,8 @@ def change_password(
     user: User,
     payload: ChangePasswordRequest,
     settings: Settings,
+    *,
+    commit: bool = True,
 ) -> str:
     if not verify_password(payload.current_password, user.password_hash):
         raise AppError("INVALID_CREDENTIALS", "当前密码不正确", status_code=401)
@@ -124,10 +140,12 @@ def change_password(
     user.password_hash = hash_password(payload.new_password)
     user.session_version += 1
     user.must_change_password = False
-    session.commit()
+    if commit:
+        session.commit()
     return create_access_token(user.id, user.role, user.session_version, settings)
 
 
-def logout(session: Session, user: User) -> None:
+def logout(session: Session, user: User, *, commit: bool = True) -> None:
     user.session_version += 1
-    session.commit()
+    if commit:
+        session.commit()

@@ -1,11 +1,13 @@
 import json
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 
-from app.db.models import User
+from app.db.models import AuditLog, User
 from app.security.passwords import hash_password
 from app.services import audit as audit_service
+from app.services.audit import AuditService
 
 REGISTER = {
     "username": "00123456",
@@ -109,6 +111,7 @@ def test_audit_logs_can_be_downloaded_as_csv_and_json(client):
     )
     assert csv.status_code == 200
     assert csv.headers["content-type"].startswith("text/csv")
+    assert csv.content.startswith(b"\xef\xbb\xbf")
     assert "auth.login.failure" in csv.text
 
     payload = client.get(
@@ -117,6 +120,80 @@ def test_audit_logs_can_be_downloaded_as_csv_and_json(client):
         headers=headers,
     ).json()
     assert any(item["event"] == "auth.login.failure" for item in payload)
+
+
+def test_audit_download_returns_all_matching_rows(client):
+    headers = admin_headers(client)
+    with client.app.state.db_session_factory() as session:
+        for index in range(120):
+            session.add(
+                AuditLog(
+                    request_id=f"batch-{index}",
+                    event="test.batch",
+                    outcome="success",
+                    actor_user_id=None,
+                    target_user_id=None,
+                    ip="127.0.0.1",
+                    details={},
+                )
+            )
+        session.commit()
+
+    payload = client.get(
+        "/api/v1/admin/audit-logs/download",
+        params={"format": "json", "event": "test.batch"},
+        headers=headers,
+    ).json()
+    assert len(payload) == 120
+
+
+def test_audit_download_rejects_unknown_format(client):
+    headers = admin_headers(client)
+    response = client.get(
+        "/api/v1/admin/audit-logs/download",
+        params={"format": "xml"},
+        headers=headers,
+    )
+    assert response.status_code == 422
+
+
+def test_failed_admin_mutations_are_audited(client):
+    headers = admin_headers(client)
+    missing = client.post(
+        "/api/v1/admin/users/999999/logout",
+        headers=headers,
+    )
+    assert missing.status_code == 404
+    missing_reset = client.post(
+        "/api/v1/admin/users/999999/reset-password",
+        headers=headers,
+    )
+    assert missing_reset.status_code == 404
+
+    rows = client.get("/api/v1/admin/audit-logs", headers=headers).json()["data"]["items"]
+    events = {item["event"] for item in rows}
+    assert "admin.user.force_logout.failure" in events
+    assert "admin.user.reset_password.failure" in events
+
+
+def test_admin_mutation_rolls_back_when_audit_recording_fails(client, monkeypatch):
+    headers = admin_headers(client)
+    target_id = add_user(client, "20000001")
+
+    def fail_audit(*_args, **_kwargs):
+        raise RuntimeError("audit unavailable")
+
+    monkeypatch.setattr(AuditService, "record", fail_audit)
+    with pytest.raises(RuntimeError, match="audit unavailable"):
+        client.patch(
+            f"/api/v1/admin/users/{target_id}/status",
+            json={"is_active": False},
+            headers=headers,
+        )
+
+    with client.app.state.db_session_factory() as session:
+        user = session.get(User, target_id)
+        assert user.is_active is True
 
 
 def test_audit_logs_purge_older_than_thirty_days(client):
