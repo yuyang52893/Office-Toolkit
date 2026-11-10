@@ -255,8 +255,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router, prefix=runtime_settings.api_prefix)
 
     try:
-        from app.routers import auth, excel, qrcode
+        from app.routers import admin, auth, excel, qrcode
 
+        app.include_router(admin.router, prefix=runtime_settings.api_prefix)
         app.include_router(auth.router, prefix=runtime_settings.api_prefix)
         app.include_router(excel.router, prefix=runtime_settings.api_prefix)
         app.include_router(excel.result_router, prefix=runtime_settings.api_prefix)

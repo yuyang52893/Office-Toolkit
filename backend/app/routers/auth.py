@@ -1,10 +1,8 @@
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 
 from app.common.rate_limit import resolve_client_ip
 from app.common.responses import error_response, success_response
-from app.dependencies.auth import DbSession, get_current_user
+from app.dependencies.auth import CurrentUserUnrestricted, DbSession
 from app.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
@@ -15,7 +13,7 @@ from app.schemas.auth import (
 from app.services import auth as auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-CurrentUser = Annotated[object, Depends(get_current_user)]
+CurrentUser = CurrentUserUnrestricted
 
 
 def _client_ip(request: Request) -> str:

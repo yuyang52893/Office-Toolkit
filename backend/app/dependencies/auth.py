@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.common.errors import AppError
 from app.config import Settings
+from app.db.models import User
 from app.repositories import users
 from app.security.tokens import InvalidTokenError, decode_access_token
 
@@ -50,11 +51,11 @@ def get_optional_user(
     return user
 
 
-def get_current_user(
+def get_current_user_unrestricted(
     request: Request,
     session: DbSession,
     authorization: Annotated[str | None, Header()] = None,
-):
+) -> User:
     if not authorization:
         raise AppError("AUTH_REQUIRED", "此功能仅登录用户可用", status_code=401)
 
@@ -68,7 +69,20 @@ def get_current_user(
     return user
 
 
-def require_admin(user: Annotated[object, Depends(get_current_user)]):
-    if getattr(user, "role", "") != "admin":
+CurrentUserUnrestricted = Annotated[User, Depends(get_current_user_unrestricted)]
+
+
+def get_current_user(user: CurrentUserUnrestricted) -> User:
+    if user.must_change_password:
+        raise AppError(
+            "PASSWORD_CHANGE_REQUIRED",
+            "请先修改临时密码后再继续使用",
+            status_code=403,
+        )
+    return user
+
+
+def require_admin(user: Annotated[User, Depends(get_current_user)]):
+    if user.role != "admin":
         raise AppError("FORBIDDEN", "需要管理员权限", status_code=403)
     return user

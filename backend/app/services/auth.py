@@ -35,6 +35,7 @@ def public_user(user: User) -> dict:
         "id": user.id,
         "username": user.username,
         "role": user.role,
+        "is_active": user.is_active,
         "must_change_password": user.must_change_password,
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,
