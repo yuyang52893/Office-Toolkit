@@ -1,10 +1,12 @@
 import { FileSpreadsheet, LayoutGrid } from "lucide-react";
 import Link from "next/link";
 
+import { AccountNav } from "@/components/account-nav";
+
 export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+      <div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-2 sm:px-6">
         <Link href="/" className="group flex items-center gap-3" aria-label="轻办公工具箱首页">
           <span className="grid size-9 place-items-center rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-200 transition group-hover:-rotate-3">
             <FileSpreadsheet size={19} strokeWidth={2.2} />
@@ -19,13 +21,16 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        <Link
-          href="/"
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-blue-50 hover:text-blue-700"
-        >
-          <LayoutGrid size={16} />
-          功能选择
-        </Link>
+        <div className="flex flex-wrap items-center justify-end gap-1">
+          <Link
+            href="/"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-blue-50 hover:text-blue-700"
+          >
+            <LayoutGrid size={16} />
+            功能选择
+          </Link>
+          <AccountNav />
+        </div>
       </div>
     </header>
   );

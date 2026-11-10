@@ -63,6 +63,21 @@ export type QrDecodedItem = {
   mac?: QrDecodedMac;
 };
 
+export type AuthUser = {
+  id: number;
+  username: string;
+  role: "user" | "admin";
+  is_active: boolean;
+  must_change_password: boolean;
+  created_at: string;
+  last_login_at: string | null;
+};
+
+export type LoginResult = {
+  access_token: string;
+  user: AuthUser;
+};
+
 export type ApiErrorBody = {
   success: false;
   data: null;
