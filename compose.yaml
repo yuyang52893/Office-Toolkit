@@ -7,6 +7,29 @@ x-logging: &default-logging
     max-file: "7"
 
 services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-office_tools}
+      MYSQL_USER: ${MYSQL_USER:-office_tools}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-office_tools_dev}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-office_tools_root_dev}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging: *default-logging
+
   backend:
     build:
       context: ./backend
@@ -22,11 +45,18 @@ services:
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
       ALERT_WEBHOOK_TIMEOUT_SECONDS: ${ALERT_WEBHOOK_TIMEOUT_SECONDS:-3}
       ALERT_COOLDOWN_SECONDS: ${ALERT_COOLDOWN_SECONDS:-60}
+      DATABASE_URL: ${DATABASE_URL:-mysql+pymysql://office_tools:office_tools_dev@mysql:3306/office_tools?charset=utf8mb4}
+      JWT_SECRET: ${JWT_SECRET:-development-only-change-this-secret-32}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-720}
     volumes:
       - office-temp:/data/tmp
       - office-logs:/data/logs
     expose:
       - "8000"
+    command:
+      - sh
+      - -c
+      - alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000
     healthcheck:
       test:
         - CMD
@@ -38,6 +68,9 @@ services:
       retries: 5
       start_period: 10s
     logging: *default-logging
+    depends_on:
+      mysql:
+        condition: service_healthy
 
   frontend:
     build:
@@ -70,3 +103,4 @@ services:
 volumes:
   office-temp:
   office-logs:
+  mysql-data:

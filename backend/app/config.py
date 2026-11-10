@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     app_name: str = "轻办公工具箱 API"
     app_env: str = "development"
     api_prefix: str = "/api/v1"
+    database_url: str = (
+        "mysql+pymysql://office_tools:office_tools_dev@127.0.0.1:3306/"
+        "office_tools?charset=utf8mb4"
+    )
+    jwt_secret: str = "development-only-change-this-secret-32"
+    jwt_expire_minutes: int = Field(default=720, ge=1, le=24 * 60)
     temp_root: Path = Path("./tmp")
     log_dir: Path = Path("./logs")
     log_file_name: str = "app.jsonl"

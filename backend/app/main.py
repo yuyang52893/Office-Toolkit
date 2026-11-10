@@ -33,12 +33,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        from app.db.session import build_engine, build_session_factory
         from app.repositories.temp_storage import TempStorage
         from app.services.excel_service import ExcelService
         from app.services.qrcode_service import QRCodeService
 
+        engine = build_engine(runtime_settings.database_url)
         storage = TempStorage(runtime_settings)
         app.state.settings = runtime_settings
+        app.state.db_engine = engine
+        app.state.db_session_factory = build_session_factory(engine)
         app.state.storage = storage
         app.state.excel_service = ExcelService(runtime_settings, storage)
         app.state.qrcode_service = QRCodeService(runtime_settings)
@@ -59,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             cleanup_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await cleanup_task
+            engine.dispose()
 
     app = FastAPI(
         title=runtime_settings.app_name,

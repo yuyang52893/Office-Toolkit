@@ -7,8 +7,12 @@ import pytest
 import xlwt
 from fastapi.testclient import TestClient
 from openpyxl import Workbook, load_workbook
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
 
 from app.config import Settings
+from app.db.base import Base
+from app.db.session import build_engine, build_session_factory
 from app.main import create_app
 
 
@@ -27,6 +31,27 @@ def test_settings(tmp_path: Path) -> Settings:
 def client(test_settings: Settings) -> Iterator[TestClient]:
     with TestClient(create_app(test_settings)) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def db_engine(test_settings: Settings) -> Iterator[Engine]:
+    settings = test_settings.model_copy(
+        update={"database_url": "sqlite+pysqlite:///:memory:"}
+    )
+    engine = build_engine(settings.database_url)
+    Base.metadata.create_all(engine)
+    try:
+        yield engine
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+@pytest.fixture
+def db_session(db_engine: Engine) -> Iterator[Session]:
+    factory = build_session_factory(db_engine)
+    with factory() as session:
+        yield session
 
 
 def make_xlsx_bytes() -> bytes:
