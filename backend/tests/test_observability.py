@@ -1,5 +1,6 @@
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -141,3 +142,16 @@ def test_rate_limit_window_resets_and_entry_cache_stays_bounded():
 
     now = 161.0
     assert limiter.check("first", 1).allowed is True
+
+
+def test_rate_limit_concurrent_requests_cannot_exceed_limit():
+    limiter = RateLimiter(
+        window_seconds=60,
+        max_entries=100,
+        clock=lambda: 100.0,
+    )
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(lambda _index: limiter.check("same-client", 5), range(30)))
+
+    assert sum(result.allowed for result in results) == 5

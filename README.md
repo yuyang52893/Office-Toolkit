@@ -87,8 +87,9 @@ docker compose logs -f nginx
 后端同时写入可轮转的 JSON Lines 文件：
 
 ```powershell
-Get-Content -Wait .\logs\backend\app.jsonl
-Select-String .\logs\backend\app.jsonl -Pattern '"level":"ERROR"'
+docker compose exec backend tail -f /data/logs/app.jsonl
+docker compose exec backend sh -c "grep '\"level\":\"ERROR\"' /data/logs/app.jsonl"
+docker compose cp backend:/data/logs/app.jsonl .
 ```
 
 单份日志达到 10MB 后轮转，保留 7 份。Docker 容器日志使用相同的大小和保留策略。

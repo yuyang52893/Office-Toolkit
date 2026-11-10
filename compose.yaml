@@ -24,7 +24,7 @@ services:
       ALERT_COOLDOWN_SECONDS: ${ALERT_COOLDOWN_SECONDS:-60}
     volumes:
       - office-temp:/data/tmp
-      - ./logs/backend:/data/logs
+      - office-logs:/data/logs
     expose:
       - "8000"
     healthcheck:
@@ -69,3 +69,4 @@ services:
 
 volumes:
   office-temp:
+  office-logs:
