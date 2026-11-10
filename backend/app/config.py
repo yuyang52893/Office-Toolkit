@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
     rate_limit_max_entries: int = Field(default=10_000, ge=100, le=1_000_000)
     cors_origins: str = ""
+    alert_webhook_url: str = ""
+    alert_webhook_timeout_seconds: int = Field(default=3, ge=1, le=30)
+    alert_cooldown_seconds: int = Field(default=60, ge=1, le=3600)
     retention_minutes: int = Field(default=30, ge=1, le=1440)
     cleanup_interval_seconds: int = Field(default=60, ge=10, le=3600)
     max_file_mb: int = Field(default=50, ge=1, le=500)

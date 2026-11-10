@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from starlette.background import BackgroundTask
 
 
 def _request_id(request: Request) -> str:
@@ -34,6 +35,7 @@ def error_response(
     status_code: int,
     details: Any = None,
     headers: Mapping[str, str] | None = None,
+    background: BackgroundTask | None = None,
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
@@ -48,5 +50,6 @@ def error_response(
             "request_id": _request_id(request),
         },
         headers=headers,
+        background=background,
     )
 

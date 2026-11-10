@@ -10,8 +10,10 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.background import BackgroundTask
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.common.alerts import WebhookAlerter
 from app.common.errors import AppError
 from app.common.logging import configure_logging
 from app.common.rate_limit import RateLimiter, RateLimitResult, resolve_client_ip
@@ -70,6 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         window_seconds=runtime_settings.rate_limit_window_seconds,
         max_entries=runtime_settings.rate_limit_max_entries,
     )
+    app.state.alerter = WebhookAlerter(runtime_settings)
     if cors_origins:
         app.add_middleware(
             CORSMiddleware,
@@ -204,21 +207,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(Exception)
     async def unexpected_error_handler(request: Request, exc: Exception):
+        request_id = getattr(request.state, "request_id", "")
         request.state.error_code = "INTERNAL_ERROR"
         logger.exception(
             "Unhandled request error",
             exc_info=exc,
             extra={
                 "event": "application_error",
-                "request_id": getattr(request.state, "request_id", ""),
+                "request_id": request_id,
                 "path": request.url.path,
             },
         )
+        alerter = request.app.state.alerter
         return error_response(
             request,
             code="INTERNAL_ERROR",
             message="服务处理失败，请稍后重试",
             status_code=500,
+            background=(
+                BackgroundTask(
+                    alerter.send_server_error,
+                    request_id=request_id,
+                    path=request.url.path,
+                )
+                if alerter.enabled
+                else None
+            ),
         )
 
     app.include_router(health.router, prefix=runtime_settings.api_prefix)
