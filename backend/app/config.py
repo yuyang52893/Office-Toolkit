@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -21,6 +22,12 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1024)
     log_backup_count: int = Field(default=7, ge=1, le=100)
+    trust_proxy_headers: bool = False
+    rate_limit_per_minute: int = Field(default=60, ge=1)
+    excel_rate_limit_per_minute: int = Field(default=10, ge=1)
+    rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
+    rate_limit_max_entries: int = Field(default=10_000, ge=100, le=1_000_000)
+    cors_origins: str = ""
     retention_minutes: int = Field(default=30, ge=1, le=1440)
     cleanup_interval_seconds: int = Field(default=60, ge=10, le=3600)
     max_file_mb: int = Field(default=50, ge=1, le=500)
@@ -58,4 +65,17 @@ class Settings(BaseSettings):
     @property
     def log_path(self) -> Path:
         return self.log_dir / self.log_file_name
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        origins = [
+            item.strip().rstrip("/") for item in self.cors_origins.split(",") if item.strip()
+        ]
+        if "*" in origins:
+            raise ValueError("CORS_ORIGINS 不允许通配符")
+        for origin in origins:
+            parsed = urlparse(origin)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise ValueError(f"无效的 CORS 来源: {origin}")
+        return origins
 

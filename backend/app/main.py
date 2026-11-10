@@ -9,10 +9,12 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.common.errors import AppError
 from app.common.logging import configure_logging
+from app.common.rate_limit import RateLimiter, RateLimitResult, resolve_client_ip
 from app.common.responses import error_response
 from app.config import Settings
 from app.routers import health
@@ -25,6 +27,7 @@ _REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 def create_app(settings: Settings | None = None) -> FastAPI:
     runtime_settings = settings or Settings()
     configure_logging(runtime_settings)
+    cors_origins = runtime_settings.cors_origin_list
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -63,6 +66,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = runtime_settings
+    app.state.rate_limiter = RateLimiter(
+        window_seconds=runtime_settings.rate_limit_window_seconds,
+        max_entries=runtime_settings.rate_limit_max_entries,
+    )
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Content-Type", "X-Request-ID"],
+            expose_headers=["X-Request-ID", "Retry-After"],
+            max_age=600,
+        )
 
     @app.middleware("http")
     async def request_context(request: Request, call_next):
@@ -70,7 +87,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         supplied = request.headers.get("x-request-id", "")
         request_id = supplied if _REQUEST_ID_PATTERN.fullmatch(supplied) else uuid4().hex
         request.state.request_id = request_id
-        response = await call_next(request)
+        limited = _check_rate_limit(request, runtime_settings)
+        if limited:
+            request.state.error_code = "RATE_LIMITED"
+            response = error_response(
+                request,
+                code="RATE_LIMITED",
+                message="请求过于频繁，请稍后重试",
+                status_code=429,
+                headers={
+                    "Retry-After": str(limited.retry_after),
+                    "X-RateLimit-Limit": str(limited.limit),
+                    "X-RateLimit-Remaining": str(limited.remaining),
+                },
+            )
+        else:
+            response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
@@ -84,11 +116,45 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "path": request.url.path,
                 "status_code": response.status_code,
                 "duration_ms": duration_ms,
-                "client_ip": request.client.host if request.client else "",
+                "client_ip": resolve_client_ip(
+                    request,
+                    trust_proxy_headers=runtime_settings.trust_proxy_headers,
+                ),
                 "error_code": getattr(request.state, "error_code", ""),
             },
         )
         return response
+
+    def _check_rate_limit(request: Request, settings: Settings) -> RateLimitResult | None:
+        path = request.url.path
+        health_path = f"{settings.api_prefix}/health"
+        if (
+            request.method == "OPTIONS"
+            or not path.startswith(settings.api_prefix)
+            or path == health_path
+        ):
+            return None
+
+        client_ip = resolve_client_ip(request, trust_proxy_headers=settings.trust_proxy_headers)
+        general = request.app.state.rate_limiter.check(
+            f"general:{client_ip}",
+            settings.rate_limit_per_minute,
+        )
+        if not general.allowed:
+            return general
+
+        excel_paths = {
+            f"{settings.api_prefix}/excel/inspect",
+            f"{settings.api_prefix}/excel/split",
+            f"{settings.api_prefix}/excel/merge",
+        }
+        if path in excel_paths:
+            excel = request.app.state.rate_limiter.check(
+                f"excel:{client_ip}",
+                settings.excel_rate_limit_per_minute,
+            )
+            return None if excel.allowed else excel
+        return None
 
     @app.exception_handler(AppError)
     async def app_error_handler(request: Request, exc: AppError):

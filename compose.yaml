@@ -15,6 +15,7 @@ services:
       APP_ENV: production
       TEMP_ROOT: /data/tmp
       LOG_DIR: /data/logs
+      TRUST_PROXY_HEADERS: "true"
     volumes:
       - office-temp:/data/tmp
       - ./logs/backend:/data/logs
