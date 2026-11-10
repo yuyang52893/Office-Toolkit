@@ -35,19 +35,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         from app.db.session import build_engine, build_session_factory
+        from app.repositories.history_storage import HistoryStorage
         from app.repositories.temp_storage import TempStorage
         from app.services.excel_service import ExcelService
         from app.services.qrcode_service import QRCodeService
 
         engine = build_engine(runtime_settings.database_url)
         storage = TempStorage(runtime_settings)
+        history_storage = HistoryStorage(runtime_settings)
         app.state.settings = runtime_settings
         app.state.db_engine = engine
         app.state.db_session_factory = build_session_factory(engine)
         app.state.storage = storage
+        app.state.history_storage = history_storage
         app.state.excel_service = ExcelService(runtime_settings, storage)
         app.state.qrcode_service = QRCodeService(runtime_settings)
         storage.prepare()
+        history_storage.prepare()
 
         async def cleanup_loop() -> None:
             while True:
@@ -56,8 +60,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     if runtime_settings.app_env != "test":
                         with app.state.db_session_factory() as session:
                             from app.services.audit import AuditService
+                            from app.services.history import HistoryService
 
                             AuditService(session).purge_expired(datetime.now(UTC))
+                            HistoryService(
+                                session=session,
+                                settings=runtime_settings,
+                                storage=app.state.history_storage,
+                            ).cleanup(now=datetime.now(UTC))
                 except Exception:
                     logger.exception("Scheduled cleanup failed")
                 await asyncio.sleep(runtime_settings.cleanup_interval_seconds)
@@ -261,11 +271,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router, prefix=runtime_settings.api_prefix)
 
     try:
-        from app.routers import admin, audit_logs, auth, excel, qrcode
+        from app.routers import admin, audit_logs, auth, excel, history, qrcode
 
         app.include_router(admin.router, prefix=runtime_settings.api_prefix)
         app.include_router(audit_logs.router, prefix=runtime_settings.api_prefix)
         app.include_router(auth.router, prefix=runtime_settings.api_prefix)
+        app.include_router(history.router, prefix=runtime_settings.api_prefix)
         app.include_router(excel.router, prefix=runtime_settings.api_prefix)
         app.include_router(excel.result_router, prefix=runtime_settings.api_prefix)
         app.include_router(qrcode.router, prefix=runtime_settings.api_prefix)

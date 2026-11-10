@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     auth_recovery_password_per_minute: int = Field(default=5, ge=1)
     auth_recovery_password_window_seconds: int = Field(default=900, ge=60, le=3600)
     temp_root: Path = Path("./tmp")
+    history_root: Path = Path("./history")
+    history_max_items: int = Field(default=10, ge=1, le=100)
+    history_max_bytes: int = Field(default=200 * 1024 * 1024, ge=1)
+    history_retention_minutes: int = Field(default=30, ge=1, le=24 * 60)
+    history_placeholder_hours: int = Field(default=3, ge=1, le=24 * 7)
     log_dir: Path = Path("./logs")
     log_file_name: str = "app.jsonl"
     log_level: str = "INFO"
