@@ -75,6 +75,36 @@ docker compose up --build
 
 访问 `http://localhost:8080`。容器构建固定使用真实模式，Nginx 统一代理页面和 `/api`，上传结果存放在 `office-temp` 临时卷中。
 
+### 日志
+
+实时查看容器日志：
+
+```powershell
+docker compose logs -f backend
+docker compose logs -f nginx
+```
+
+后端同时写入可轮转的 JSON Lines 文件：
+
+```powershell
+Get-Content -Wait .\logs\backend\app.jsonl
+Select-String .\logs\backend\app.jsonl -Pattern '"level":"ERROR"'
+```
+
+单份日志达到 10MB 后轮转，保留 7 份。Docker 容器日志使用相同的大小和保留策略。
+
+### 二期运维配置
+
+复制根目录的 `.env.example` 为 `.env` 后可调整：
+
+- `RATE_LIMIT_PER_MINUTE`：普通 API 每 IP 每分钟请求上限，默认 60。
+- `EXCEL_RATE_LIMIT_PER_MINUTE`：Excel 检查、拆分和合并每 IP 每分钟上限，默认 10。
+- `CORS_ORIGINS`：逗号分隔的独立前端域名；同源部署留空。
+- `ALERT_WEBHOOK_URL`：可选错误告警地址，默认留空即关闭。
+- `ALERT_COOLDOWN_SECONDS`：相同接口告警冷却时间，默认 60 秒。
+
+Webhook 仅在发生未处理的 HTTP 500 错误时由后台发送，不包含上传文件内容或原始异常详情。日志网页查询属于三期管理员功能。
+
 ## 项目文档
 
 - [产品设计文档](docs/PRODUCT_DESIGN.md)：产品定位、功能规则、路线图和验收标准。

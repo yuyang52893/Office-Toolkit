@@ -16,7 +16,12 @@ services:
       TEMP_ROOT: /data/tmp
       LOG_DIR: /data/logs
       TRUST_PROXY_HEADERS: "true"
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
+      EXCEL_RATE_LIMIT_PER_MINUTE: ${EXCEL_RATE_LIMIT_PER_MINUTE:-10}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      ALERT_WEBHOOK_TIMEOUT_SECONDS: ${ALERT_WEBHOOK_TIMEOUT_SECONDS:-3}
+      ALERT_COOLDOWN_SECONDS: ${ALERT_COOLDOWN_SECONDS:-60}
     volumes:
       - office-temp:/data/tmp
       - ./logs/backend:/data/logs
