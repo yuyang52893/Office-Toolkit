@@ -1,5 +1,6 @@
 import io
 
+from conftest import authenticated_headers, history_count
 from fastapi.testclient import TestClient
 from PIL import Image
 
@@ -103,4 +104,40 @@ def test_qrcode_rejects_image_over_pixel_budget(test_settings):
         )
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "IMAGE_TOO_LARGE"
+
+
+def test_logged_in_qrcode_result_returns_history_headers(client: TestClient):
+    headers = authenticated_headers(client)
+    response = client.post(
+        "/api/v1/qrcode/generate",
+        headers=headers,
+        json={"content": "history qr", "size": 128, "mode": "text"},
+    )
+    assert response.status_code == 200
+    assert response.headers["X-History-Status"] == "saved"
+    assert response.headers["X-History-Id"]
+    assert history_count(client) == 1
+
+
+def test_anonymous_qrcode_and_logged_in_decode_do_not_save_decoded_text(client: TestClient):
+    anonymous = client.post(
+        "/api/v1/qrcode/generate",
+        json={"content": "anonymous qr", "size": 128, "mode": "text"},
+    )
+    assert anonymous.status_code == 200
+    assert history_count(client) == 0
+
+    headers = authenticated_headers(client)
+    generated = client.post(
+        "/api/v1/qrcode/generate",
+        headers=headers,
+        json={"content": "decode-only", "size": 128, "mode": "text"},
+    )
+    decoded = client.post(
+        "/api/v1/qrcode/decode",
+        headers=headers,
+        files={"file": ("code.png", generated.content, "image/png")},
+    )
+    assert decoded.status_code == 200
+    assert history_count(client) == 1
 

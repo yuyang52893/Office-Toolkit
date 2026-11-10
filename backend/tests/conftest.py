@@ -15,6 +15,13 @@ from app.db.base import Base
 from app.db.session import build_engine, build_session_factory
 from app.main import create_app
 
+AUTH_REGISTER = {
+    "username": "00123456",
+    "password": "Password1",
+    "recovery_question": "我的验证问题",
+    "recovery_answer": "我的答案",
+}
+
 
 @pytest.fixture
 def test_settings(tmp_path: Path) -> Settings:
@@ -109,6 +116,29 @@ def sheet_refs(upload: dict) -> list[dict[str, int | str]]:
         for file in upload["files"]
         for sheet in file["sheets"]
     ]
+
+
+def authenticated_headers(client: TestClient) -> dict[str, str]:
+    registered = client.post("/api/v1/auth/register", json=AUTH_REGISTER)
+    assert registered.status_code == 201, registered.text
+    logged_in = client.post(
+        "/api/v1/auth/login",
+        json={
+            "username": AUTH_REGISTER["username"],
+            "password": AUTH_REGISTER["password"],
+        },
+    )
+    assert logged_in.status_code == 200, logged_in.text
+    return {"Authorization": f"Bearer {logged_in.json()['data']['access_token']}"}
+
+
+def history_count(client: TestClient) -> int:
+    from sqlalchemy import func, select
+
+    from app.db.models import UserHistory
+
+    with client.app.state.db_session_factory() as session:
+        return session.scalar(select(func.count()).select_from(UserHistory)) or 0
 
 
 def read_zip_files(content: bytes) -> dict[str, bytes]:

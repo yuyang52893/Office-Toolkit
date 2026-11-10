@@ -199,6 +199,44 @@ class HistoryService:
             evicted_count=len(evicted),
         )
 
+    def capture_result_id(
+        self,
+        *,
+        user: User,
+        tool: str,
+        operation: str,
+        result_id: str,
+        temp_storage,
+        summary: dict[str, Any],
+        request_id: str,
+        ip: str,
+        now: datetime | None = None,
+    ) -> HistoryCapture:
+        try:
+            source_path, metadata = temp_storage.resolve_result(result_id)
+            return self.capture_result(
+                user=user,
+                tool=tool,
+                operation=operation,
+                result=HistoryResult(
+                    source_path=source_path,
+                    filename=str(metadata["filename"]),
+                    size_bytes=int(metadata["size"]),
+                    summary=summary,
+                ),
+                now=now,
+                request_id=request_id,
+                ip=ip,
+            )
+        except Exception:
+            logger.exception(
+                "History capture failed before storage; current result remains available"
+            )
+            return HistoryCapture(
+                saved=False,
+                notice="历史保存失败，当前结果仍可下载",
+            )
+
     def list_for_user(
         self,
         user_id: int,

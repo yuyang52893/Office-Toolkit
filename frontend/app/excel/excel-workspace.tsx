@@ -23,6 +23,7 @@ import type { ComponentType, DragEvent, KeyboardEvent } from "react";
 import { useMemo, useRef, useState } from "react";
 
 import { StatusBanner } from "@/components/status-banner";
+import { HistoryNotice } from "@/components/history-notice";
 import { Toggle } from "@/components/toggle";
 import { BackToTools } from "@/components/back-to-tools";
 import {
@@ -832,6 +833,11 @@ export function ExcelWorkspace({ initialMode = "by_sheet" }: { initialMode?: Exc
                 </div>
               </div>
             </div>
+            {result.history ? (
+              <div className="px-5 pt-4 sm:px-7">
+                <HistoryNotice capture={result.history} />
+              </div>
+            ) : null}
             {downloadError ? (
               <div className="px-5 pt-4 sm:px-7">
                 <StatusBanner tone="error">{downloadError}</StatusBanner>

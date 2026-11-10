@@ -20,10 +20,11 @@ import type { ChangeEvent, DragEvent, KeyboardEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { StatusBanner } from "@/components/status-banner";
+import { HistoryNotice } from "@/components/history-notice";
 import { BackToTools } from "@/components/back-to-tools";
 import { decodeQrCode, generateQrCode } from "@/lib/api";
 import { formatBytes, getErrorMessage } from "@/lib/format";
-import type { QrDecodedItem } from "@/lib/types";
+import type { HistoryCapture, QrDecodedItem } from "@/lib/types";
 import { MacAddressTool } from "./mac-address-tool";
 
 type Tab = "generate" | "decode" | "mac";
@@ -35,6 +36,7 @@ export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
+  const [historyCapture, setHistoryCapture] = useState<HistoryCapture | null>(null);
   const previewUrlRef = useRef("");
 
   const [decodeFile, setDecodeFile] = useState<File | null>(null);
@@ -73,6 +75,7 @@ export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
 
   function markGenerateDirty() {
     setGenerateError("");
+    setHistoryCapture(null);
     replacePreview(null);
   }
 
@@ -83,9 +86,11 @@ export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
     }
     setGenerating(true);
     setGenerateError("");
+    setHistoryCapture(null);
     try {
-      const { blob } = await generateQrCode(content, size, "text");
+      const { blob, history } = await generateQrCode(content, size, "text");
       replacePreview(blob);
+      setHistoryCapture(history);
     } catch (error) {
       replacePreview(null);
       setGenerateError(getErrorMessage(error));
@@ -341,6 +346,11 @@ export function QrCodeTools({ initialTab = "generate" }: { initialTab?: Tab }) {
             {generateError ? (
               <div className="mt-4">
                 <StatusBanner tone="error">{generateError}</StatusBanner>
+              </div>
+            ) : null}
+            {historyCapture ? (
+              <div className="mt-4">
+                <HistoryNotice capture={historyCapture} />
               </div>
             ) : null}
           </section>

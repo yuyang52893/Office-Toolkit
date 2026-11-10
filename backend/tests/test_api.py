@@ -2,6 +2,8 @@ from datetime import UTC, datetime, timedelta
 
 from conftest import (
     add_xlsx_padding,
+    authenticated_headers,
+    history_count,
     make_csv_bytes,
     make_xls_bytes,
     make_xlsx_bytes,
@@ -367,4 +369,68 @@ def test_expired_result_cannot_be_downloaded(client: TestClient, test_settings):
     response = client.get(download_url)
     assert response.status_code in {404, 410}
     assert response.json()["success"] is False
+
+
+def test_logged_in_excel_result_is_added_to_history(client: TestClient):
+    upload = upload_files(client, [("销售.xlsx", make_xlsx_bytes(), "application/octet-stream")])
+    headers = authenticated_headers(client)
+    response = client.post(
+        "/api/v1/excel/split",
+        headers=headers,
+        json={
+            "upload_id": upload["upload_id"],
+            "mode": "by_sheet",
+            "sheets": sheet_refs(upload),
+            "has_header": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    history = response.json()["data"]["history"]
+    assert history["saved"] is True
+    assert history["history_id"]
+    assert history_count(client) == 1
+
+
+def test_anonymous_excel_result_is_not_added_to_history(client: TestClient):
+    upload = upload_files(client, [("销售.xlsx", make_xlsx_bytes(), "application/octet-stream")])
+    response = client.post(
+        "/api/v1/excel/split",
+        json={
+            "upload_id": upload["upload_id"],
+            "mode": "by_sheet",
+            "sheets": sheet_refs(upload),
+            "has_header": True,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["data"].get("history") is None
+    assert history_count(client) == 0
+
+
+def test_history_save_failure_does_not_break_excel_download(
+    client: TestClient,
+    monkeypatch,
+):
+    upload = upload_files(client, [("销售.xlsx", make_xlsx_bytes(), "application/octet-stream")])
+    headers = authenticated_headers(client)
+
+    def fail_history_write(**_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(client.app.state.history_storage, "write", fail_history_write)
+    response = client.post(
+        "/api/v1/excel/split",
+        headers=headers,
+        json={
+            "upload_id": upload["upload_id"],
+            "mode": "by_rows",
+            "sheets": sheet_refs(upload)[:1],
+            "rows_per_file": 1,
+            "has_header": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["download_url"]
+    assert response.json()["data"]["history"]["saved"] is False
+    assert "仍可下载" in response.json()["data"]["history"]["notice"]
 

@@ -4,6 +4,7 @@ import type {
   ExcelResult,
   ExcelUpload,
   HeaderStrategy,
+  HistoryCapture,
   QrDecodedItem,
   SheetRef,
   SplitMode,
@@ -149,9 +150,9 @@ export async function generateQrCode(
   content: string,
   size: number,
   mode: "text" | "mac",
-): Promise<{ blob: Blob; normalizedMac: string | null }> {
+): Promise<{ blob: Blob; normalizedMac: string | null; history: HistoryCapture | null }> {
   if (demoMode) {
-    return generateDemoQrCode(content, size, mode);
+    return { ...(await generateDemoQrCode(content, size, mode)), history: null };
   }
   const response = await fetch("/api/v1/qrcode/generate", {
     method: "POST",
@@ -161,9 +162,26 @@ export async function generateQrCode(
   if (!response.ok) {
     return readError(response);
   }
+  const status = response.headers.get("X-History-Status");
+  const encodedNotice = response.headers.get("X-History-Notice");
+  let notice = encodedNotice ?? undefined;
+  if (encodedNotice) {
+    try {
+      notice = decodeURIComponent(encodedNotice);
+    } catch {
+      notice = encodedNotice;
+    }
+  }
   return {
     blob: await response.blob(),
     normalizedMac: response.headers.get("X-MAC-Normalized"),
+    history: status
+      ? {
+          saved: status === "saved",
+          history_id: response.headers.get("X-History-Id") ?? undefined,
+          notice,
+        }
+      : null,
   };
 }
 

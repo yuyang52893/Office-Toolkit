@@ -53,6 +53,9 @@ def get_optional_user(
     return user
 
 
+OptionalCurrentUser = Annotated[User | None, Depends(get_optional_user)]
+
+
 def get_current_user_unrestricted(
     request: Request,
     session: DbSession,

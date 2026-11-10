@@ -21,6 +21,13 @@ export type ExcelUpload = {
   files: UploadedFile[];
 };
 
+export type HistoryCapture = {
+  saved: boolean;
+  history_id?: string;
+  notice?: string;
+  evicted_count?: number;
+};
+
 export type ExcelResult = {
   result_id: string;
   filename: string;
@@ -29,6 +36,7 @@ export type ExcelResult = {
   download_url: string;
   output_count: number;
   row_count?: number;
+  history?: HistoryCapture;
 };
 
 export type SplitMode = "by_sheet" | "by_rows" | "by_column";
