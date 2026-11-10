@@ -1,11 +1,13 @@
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 
 from app.config import Settings
 from app.db.base import Base
 from app.db.models import User
 from app.main import create_app
 from app.security.passwords import hash_password
+from app.services import auth as auth_service
 
 REGISTER = {
     "username": "00123456",
@@ -80,6 +82,18 @@ def test_register_rejects_duplicate_username(client):
     assert duplicate.status_code == 409
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("recovery_question", "   "),
+        ("recovery_answer", "   "),
+    ],
+)
+def test_register_rejects_blank_recovery_fields(client, field, value):
+    response = client.post("/api/v1/auth/register", json={**REGISTER, field: value})
+    assert response.status_code == 422
+
+
 def test_me_requires_token(client):
     response = client.get("/api/v1/auth/me")
     assert response.status_code == 401
@@ -123,19 +137,54 @@ def test_disabled_user_cannot_login(test_settings):
         assert response.json()["error"]["code"] == "INVALID_CREDENTIALS"
 
 
-def test_recovery_wrong_answer_uses_generic_message(client):
+def test_recovery_question_does_not_reveal_account_existence(client):
     assert client.post("/api/v1/auth/register", json=REGISTER).status_code == 201
-    question = client.post(
+    existing = client.post(
         "/api/v1/auth/recovery-question",
         json={"username": REGISTER["username"]},
     )
-    assert question.status_code == 200
-    assert question.json()["data"]["recovery_question"] == REGISTER["recovery_question"]
+    missing = client.post(
+        "/api/v1/auth/recovery-question",
+        json={"username": "99999999"},
+    )
+    assert existing.status_code == 200
+    assert missing.status_code == 200
+    assert existing.json()["data"] == missing.json()["data"]
+    assert REGISTER["recovery_question"] not in existing.text
+
+
+def test_reset_requires_registered_recovery_question(client):
+    assert client.post("/api/v1/auth/register", json=REGISTER).status_code == 201
+    missing_field = client.post(
+        "/api/v1/auth/reset-password",
+        json={
+            "username": REGISTER["username"],
+            "recovery_answer": REGISTER["recovery_answer"],
+            "new_password": "NewPassword1",
+        },
+    )
+    assert missing_field.status_code == 422
 
     wrong = client.post(
         "/api/v1/auth/reset-password",
         json={
             "username": REGISTER["username"],
+            "recovery_question": "不是我的问题",
+            "recovery_answer": REGISTER["recovery_answer"],
+            "new_password": "NewPassword1",
+        },
+    )
+    assert wrong.status_code == 401
+    assert wrong.json()["error"]["code"] == "INVALID_RECOVERY"
+
+
+def test_reset_uses_registered_question_and_answer(client):
+    assert client.post("/api/v1/auth/register", json=REGISTER).status_code == 201
+    wrong = client.post(
+        "/api/v1/auth/reset-password",
+        json={
+            "username": REGISTER["username"],
+            "recovery_question": REGISTER["recovery_question"],
             "recovery_answer": "错误答案",
             "new_password": "NewPassword1",
         },
@@ -155,6 +204,7 @@ def test_recovery_invalidates_old_token(client):
         "/api/v1/auth/reset-password",
         json={
             "username": REGISTER["username"],
+            "recovery_question": REGISTER["recovery_question"],
             "recovery_answer": REGISTER["recovery_answer"],
             "new_password": "NewPassword1",
         },
@@ -217,3 +267,77 @@ def test_login_rate_limit(test_settings):
         assert first.status_code == 200
         assert second.status_code == 429
         assert second.json()["error"]["code"] == "RATE_LIMITED"
+
+
+def test_auth_rate_limit_uses_trusted_proxy_ip(test_settings):
+    settings = test_settings.model_copy(
+        update={"auth_login_per_minute": 1, "trust_proxy_headers": True}
+    )
+    app = create_app(settings)
+    with TestClient(app) as client:
+        Base.metadata.create_all(app.state.db_engine)
+        with app.state.db_session_factory() as session:
+            session.add(
+                User(
+                    username="00123456",
+                    password_hash=hash_password("Password1"),
+                    recovery_question="问题",
+                    recovery_answer_hash=hash_password("答案"),
+                    role="user",
+                    is_active=True,
+                )
+            )
+            session.commit()
+
+        body = {"username": "00123456", "password": "Password1"}
+        first_ip = client.post(
+            "/api/v1/auth/login",
+            json=body,
+            headers={"X-Real-IP": "203.0.113.10"},
+        )
+        second_ip = client.post(
+            "/api/v1/auth/login",
+            json=body,
+            headers={"X-Real-IP": "203.0.113.11"},
+        )
+        same_ip = client.post(
+            "/api/v1/auth/login",
+            json=body,
+            headers={"X-Real-IP": "203.0.113.10"},
+        )
+        assert first_ip.status_code == 200
+        assert second_ip.status_code == 200
+        assert same_ip.status_code == 429
+
+
+def test_concurrent_duplicate_registration_returns_409(client, monkeypatch):
+    original_add = auth_service.users.add_user
+
+    def add_then_conflict(session, user):
+        result = original_add(session, user)
+        if user.username == REGISTER["username"]:
+            session.flush()
+            raise IntegrityError("INSERT", {}, Exception("duplicate"))
+        return result
+
+    monkeypatch.setattr(auth_service.users, "add_user", add_then_conflict)
+    response = client.post("/api/v1/auth/register", json=REGISTER)
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "USERNAME_TAKEN"
+
+
+def test_missing_user_login_still_verifies_password(client, monkeypatch):
+    calls = []
+    original_verify = auth_service.verify_password
+
+    def counting_verify(value, password_hash):
+        calls.append((value, password_hash))
+        return original_verify(value, password_hash)
+
+    monkeypatch.setattr(auth_service, "verify_password", counting_verify)
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"username": "99999999", "password": "Password1"},
+    )
+    assert response.status_code == 401
+    assert len(calls) == 1

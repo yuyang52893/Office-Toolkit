@@ -1,3 +1,6 @@
+import unicodedata
+
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.common.errors import AppError
@@ -18,6 +21,14 @@ from app.security.passwords import (
 )
 from app.security.tokens import create_access_token
 
+_RECOVERY_PROMPT = "请输入注册时设置的找回问题和答案"
+_DUMMY_PASSWORD_HASH = hash_password("dummy-password-for-missing-users")
+_DUMMY_RECOVERY_HASH = hash_password("dummy-answer-for-missing-users")
+
+
+def _normalize_recovery_question(value: str) -> str:
+    return unicodedata.normalize("NFKC", value.strip()).casefold()
+
 
 def public_user(user: User) -> dict:
     return {
@@ -34,29 +45,37 @@ def register(session: Session, payload: RegisterRequest) -> User:
     if users.get_by_username(session, payload.username) is not None:
         raise AppError("USERNAME_TAKEN", "该用户名已被使用", status_code=409)
 
-    user = users.add_user(
-        session,
-        User(
-            username=payload.username,
-            password_hash=hash_password(payload.password),
-            recovery_question=payload.recovery_question.strip(),
-            recovery_answer_hash=hash_password(normalize_recovery_answer(payload.recovery_answer)),
-            role="user",
-            is_active=True,
-            session_version=0,
-            must_change_password=False,
-        ),
-    )
-    session.commit()
+    try:
+        user = users.add_user(
+            session,
+            User(
+                username=payload.username,
+                password_hash=hash_password(payload.password),
+                recovery_question=_normalize_recovery_question(payload.recovery_question),
+                recovery_answer_hash=hash_password(
+                    normalize_recovery_answer(payload.recovery_answer)
+                ),
+                role="user",
+                is_active=True,
+                session_version=0,
+                must_change_password=False,
+            ),
+        )
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise AppError("USERNAME_TAKEN", "该用户名已被使用", status_code=409) from exc
     return user
 
 
 def login(session: Session, payload: LoginRequest, settings: Settings) -> tuple[str, User]:
     user = users.get_by_username(session, payload.username)
+    password_hash = user.password_hash if user is not None else _DUMMY_PASSWORD_HASH
+    password_matches = verify_password(payload.password, password_hash)
     if (
         user is None
         or not user.is_active
-        or not verify_password(payload.password, user.password_hash)
+        or not password_matches
     ):
         raise AppError("INVALID_CREDENTIALS", "用户名或密码错误", status_code=401)
 
@@ -66,19 +85,24 @@ def login(session: Session, payload: LoginRequest, settings: Settings) -> tuple[
 
 
 def recovery_question(session: Session, payload: RecoveryQuestionRequest) -> str:
-    user = users.get_by_username(session, payload.username)
-    if user is None:
-        return "请回答注册时设置的找回问题"
-    return user.recovery_question
+    del payload
+    return _RECOVERY_PROMPT
 
 
 def reset_password(session: Session, payload: ResetPasswordRequest) -> None:
     user = users.get_by_username(session, payload.username)
-    answer_matches = user is not None and verify_password(
-        normalize_recovery_answer(payload.recovery_answer),
-        user.recovery_answer_hash,
+    question_matches = (
+        user is not None
+        and _normalize_recovery_question(payload.recovery_question) == user.recovery_question
     )
-    if not answer_matches:
+    answer_hash = (
+        user.recovery_answer_hash if user is not None else _DUMMY_RECOVERY_HASH
+    )
+    answer_matches = verify_password(
+        normalize_recovery_answer(payload.recovery_answer),
+        answer_hash,
+    )
+    if not question_matches or not answer_matches:
         raise AppError("INVALID_RECOVERY", "找回答案不正确", status_code=401)
 
     user.password_hash = hash_password(payload.new_password)

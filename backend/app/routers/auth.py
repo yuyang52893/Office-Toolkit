@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 
+from app.common.rate_limit import resolve_client_ip
 from app.common.responses import error_response, success_response
 from app.dependencies.auth import DbSession, get_current_user
 from app.schemas.auth import (
@@ -18,7 +19,11 @@ CurrentUser = Annotated[object, Depends(get_current_user)]
 
 
 def _client_ip(request: Request) -> str:
-    return request.client.host if request.client else ""
+    settings = request.app.state.settings
+    return resolve_client_ip(
+        request,
+        trust_proxy_headers=settings.trust_proxy_headers,
+    )
 
 
 def _rate_limited(request: Request, limiter_name: str, key: str, limit: int):
@@ -26,6 +31,7 @@ def _rate_limited(request: Request, limiter_name: str, key: str, limit: int):
     result = limiter.check(f"{key}:{_client_ip(request)}", limit)
     if result.allowed:
         return None
+    request.state.error_code = "RATE_LIMITED"
     return error_response(
         request,
         code="RATE_LIMITED",
