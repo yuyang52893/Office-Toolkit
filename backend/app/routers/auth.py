@@ -1,4 +1,7 @@
+import logging
+
 from fastapi import APIRouter, Request
+from sqlalchemy.orm import Session
 
 from app.common.rate_limit import resolve_client_ip
 from app.common.responses import error_response, success_response
@@ -11,7 +14,9 @@ from app.schemas.auth import (
     ResetPasswordRequest,
 )
 from app.services import auth as auth_service
+from app.services.audit import AuditService
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 CurrentUser = CurrentUserUnrestricted
 
@@ -43,9 +48,46 @@ def _rate_limited(request: Request, limiter_name: str, key: str, limit: int):
     )
 
 
+def _record(
+    request: Request,
+    session: Session,
+    *,
+    event: str,
+    outcome: str,
+    actor_user_id: int | None = None,
+    target_user_id: int | None = None,
+    details: dict | None = None,
+) -> None:
+    try:
+        AuditService(session).record(
+            event=event,
+            outcome=outcome,
+            request_id=request.state.request_id,
+            actor_user_id=actor_user_id,
+            target_user_id=target_user_id,
+            ip=_client_ip(request),
+            details=details,
+        )
+    except Exception:
+        logger.warning("Audit event recording failed", exc_info=True)
+
+
 @router.post("/register")
 def register(request: Request, payload: RegisterRequest, session: DbSession):
-    user = auth_service.register(session, payload)
+    try:
+        user = auth_service.register(session, payload)
+    except Exception:
+        _record(request, session, event="auth.register.failure", outcome="failure")
+        raise
+    _record(
+        request,
+        session,
+        event="auth.register.success",
+        outcome="success",
+        actor_user_id=user.id,
+        target_user_id=user.id,
+        details={"username": user.username},
+    )
     return success_response(request, auth_service.public_user(user), status_code=201)
 
 
@@ -60,7 +102,24 @@ def login(request: Request, payload: LoginRequest, session: DbSession):
     )
     if limited is not None:
         return limited
-    token, user = auth_service.login(session, payload, settings)
+    try:
+        token, user = auth_service.login(session, payload, settings)
+    except Exception:
+        _record(
+            request,
+            session,
+            event="auth.login.failure",
+            outcome="failure",
+            details={"reason": "invalid_credentials"},
+        )
+        raise
+    _record(
+        request,
+        session,
+        event="auth.login.success",
+        outcome="success",
+        actor_user_id=user.id,
+    )
     return success_response(
         request,
         {"access_token": token, "user": auth_service.public_user(user)},
@@ -74,6 +133,13 @@ def logout(
     user: CurrentUser,
 ):
     auth_service.logout(session, user)
+    _record(
+        request,
+        session,
+        event="auth.logout.success",
+        outcome="success",
+        actor_user_id=user.id,
+    )
     return success_response(request)
 
 
@@ -94,6 +160,13 @@ def recovery_question(request: Request, payload: RecoveryQuestionRequest, sessio
     if limited is not None:
         return limited
     question = auth_service.recovery_question(session, payload)
+    _record(
+        request,
+        session,
+        event="auth.recovery_question.success",
+        outcome="success",
+        details={"reason": "generic_prompt"},
+    )
     return success_response(request, {"recovery_question": question})
 
 
@@ -108,7 +181,23 @@ def reset_password(request: Request, payload: ResetPasswordRequest, session: DbS
     )
     if limited is not None:
         return limited
-    auth_service.reset_password(session, payload)
+    try:
+        auth_service.reset_password(session, payload)
+    except Exception:
+        _record(
+            request,
+            session,
+            event="auth.reset_password.failure",
+            outcome="failure",
+            details={"reason": "invalid_recovery"},
+        )
+        raise
+    _record(
+        request,
+        session,
+        event="auth.reset_password.success",
+        outcome="success",
+    )
     return success_response(request)
 
 
@@ -120,5 +209,23 @@ def change_password(
     user: CurrentUser,
 ):
     settings = request.app.state.settings
-    token = auth_service.change_password(session, user, payload, settings)
+    try:
+        token = auth_service.change_password(session, user, payload, settings)
+    except Exception:
+        _record(
+            request,
+            session,
+            event="auth.change_password.failure",
+            outcome="failure",
+            actor_user_id=user.id,
+            details={"reason": "invalid_current_password"},
+        )
+        raise
+    _record(
+        request,
+        session,
+        event="auth.change_password.success",
+        outcome="success",
+        actor_user_id=user.id,
+    )
     return success_response(request, {"access_token": token})

@@ -1,19 +1,59 @@
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy.orm import Session
 
+from app.common.rate_limit import resolve_client_ip
 from app.common.responses import success_response
+from app.db.models import User
 from app.dependencies.auth import DbSession, require_admin
 from app.schemas.admin import AdminRoleRequest, AdminStatusRequest
 from app.services import admin as admin_service
+from app.services.audit import AuditService
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/users", tags=["admin"])
-AdminUser = Annotated[object, Depends(require_admin)]
+AdminUser = Annotated[User, Depends(require_admin)]
+
+
+def _record(
+    request: Request,
+    session: Session,
+    *,
+    event: str,
+    outcome: str,
+    actor_user_id: int | None,
+    target_user_id: int | None = None,
+    details: dict | None = None,
+) -> None:
+    try:
+        AuditService(session).record(
+            event=event,
+            outcome=outcome,
+            request_id=request.state.request_id,
+            actor_user_id=actor_user_id,
+            target_user_id=target_user_id,
+            ip=resolve_client_ip(
+                request,
+                trust_proxy_headers=request.app.state.settings.trust_proxy_headers,
+            ),
+            details=details,
+        )
+    except Exception:
+        logger.warning("Audit event recording failed", exc_info=True)
 
 
 @router.get("")
 def list_users(request: Request, session: DbSession, _admin: AdminUser):
     users = admin_service.list_users(session)
+    _record(
+        request,
+        session,
+        event="admin.users.list.success",
+        outcome="success",
+        actor_user_id=_admin.id,
+    )
     return success_response(
         request,
         {"items": [admin_service.public_user(user) for user in users]},
@@ -28,7 +68,28 @@ def update_status(
     session: DbSession,
     _admin: AdminUser,
 ):
-    user = admin_service.set_status(session, user_id, payload.is_active)
+    try:
+        user = admin_service.set_status(session, user_id, payload.is_active)
+    except Exception:
+        _record(
+            request,
+            session,
+            event="admin.user.status.failure",
+            outcome="failure",
+            actor_user_id=_admin.id,
+            target_user_id=user_id,
+            details={"is_active": payload.is_active},
+        )
+        raise
+    _record(
+        request,
+        session,
+        event="admin.user.status.success",
+        outcome="success",
+        actor_user_id=_admin.id,
+        target_user_id=user_id,
+        details={"is_active": payload.is_active},
+    )
     return success_response(request, admin_service.public_user(user))
 
 
@@ -40,7 +101,28 @@ def update_role(
     session: DbSession,
     _admin: AdminUser,
 ):
-    user = admin_service.set_role(session, user_id, payload.role)
+    try:
+        user = admin_service.set_role(session, user_id, payload.role)
+    except Exception:
+        _record(
+            request,
+            session,
+            event="admin.user.role.failure",
+            outcome="failure",
+            actor_user_id=_admin.id,
+            target_user_id=user_id,
+            details={"to_role": payload.role},
+        )
+        raise
+    _record(
+        request,
+        session,
+        event="admin.user.role.success",
+        outcome="success",
+        actor_user_id=_admin.id,
+        target_user_id=user_id,
+        details={"to_role": payload.role},
+    )
     return success_response(request, admin_service.public_user(user))
 
 
@@ -52,6 +134,14 @@ def force_logout(
     _admin: AdminUser,
 ):
     user = admin_service.force_logout(session, user_id)
+    _record(
+        request,
+        session,
+        event="admin.user.force_logout.success",
+        outcome="success",
+        actor_user_id=_admin.id,
+        target_user_id=user_id,
+    )
     return success_response(request, admin_service.public_user(user))
 
 
@@ -63,6 +153,14 @@ def reset_password(
     _admin: AdminUser,
 ):
     temporary_password, user = admin_service.reset_password(session, user_id)
+    _record(
+        request,
+        session,
+        event="admin.user.reset_password.success",
+        outcome="success",
+        actor_user_id=_admin.id,
+        target_user_id=user_id,
+    )
     return success_response(
         request,
         {

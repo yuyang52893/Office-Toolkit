@@ -4,6 +4,7 @@ import logging
 import re
 import time
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -52,8 +53,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             while True:
                 try:
                     await asyncio.to_thread(storage.cleanup_expired)
+                    if runtime_settings.app_env != "test":
+                        with app.state.db_session_factory() as session:
+                            from app.services.audit import AuditService
+
+                            AuditService(session).purge_expired(datetime.now(UTC))
                 except Exception:
-                    logger.exception("Temporary file cleanup failed")
+                    logger.exception("Scheduled cleanup failed")
                 await asyncio.sleep(runtime_settings.cleanup_interval_seconds)
 
         cleanup_task = asyncio.create_task(cleanup_loop())
@@ -255,9 +261,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router, prefix=runtime_settings.api_prefix)
 
     try:
-        from app.routers import admin, auth, excel, qrcode
+        from app.routers import admin, audit_logs, auth, excel, qrcode
 
         app.include_router(admin.router, prefix=runtime_settings.api_prefix)
+        app.include_router(audit_logs.router, prefix=runtime_settings.api_prefix)
         app.include_router(auth.router, prefix=runtime_settings.api_prefix)
         app.include_router(excel.router, prefix=runtime_settings.api_prefix)
         app.include_router(excel.result_router, prefix=runtime_settings.api_prefix)
