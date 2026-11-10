@@ -9,6 +9,25 @@ import { useAuth } from "@/components/auth-provider";
 import { StatusBanner } from "@/components/status-banner";
 import { getErrorMessage } from "@/lib/format";
 
+function safeNextPath(value: string): string {
+  const baseOrigin = "http://same-origin.invalid";
+  if (
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    /[\u0000-\u001f\\]/u.test(value)
+  ) {
+    return "";
+  }
+  try {
+    const resolved = new URL(value, baseOrigin);
+    return resolved.origin === baseOrigin
+      ? `${resolved.pathname}${resolved.search}${resolved.hash}`
+      : "";
+  } catch {
+    return "";
+  }
+}
+
 function LoginContent() {
   const { login } = useAuth();
   const router = useRouter();
@@ -18,9 +37,7 @@ function LoginContent() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const requestedNext = searchParams.get("next") ?? "";
-  const nextPath = requestedNext.startsWith("/") && !requestedNext.startsWith("//")
-    ? requestedNext
-    : "";
+  const nextPath = safeNextPath(requestedNext);
 
   async function submit() {
     setError("");

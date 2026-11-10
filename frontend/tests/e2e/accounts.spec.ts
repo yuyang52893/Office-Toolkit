@@ -185,3 +185,62 @@ test("无 Token 访问登录专属页面会跳转登录", async ({ page }) => {
   await expect(page).toHaveURL(/\/login\?next=%2Fchange-password$/);
   await expect(page.getByText("此功能仅登录用户可用")).toBeVisible();
 });
+
+test("登录后的 next 地址不能跳出当前站点", async ({ page }) => {
+  await mockAuthApi(page);
+  await page.goto(`/login?next=${encodeURIComponent("/\\evil.example")}`);
+  await page.getByLabel("用户名").fill("00123456");
+  await page.getByLabel("密码", { exact: true }).fill("Password1");
+  await page.getByRole("button", { name: "登录" }).click();
+
+  await expect(page).toHaveURL("http://localhost:3000/");
+});
+
+test("临时网络失败不会清除已保存的 Bearer Token", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.sessionStorage.setItem("office_tools_access_token", "keep-me");
+  });
+  await page.route("**/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: false,
+        data: null,
+        error: { code: "UNAVAILABLE", message: "服务暂时不可用" },
+        request_id: "retry-request",
+      }),
+    });
+  });
+
+  await page.goto("/change-password");
+  await expect(page.getByText("登录状态验证失败，请重试")).toBeVisible();
+  await expect(page.getByRole("button", { name: "重新验证" })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => sessionStorage.getItem("office_tools_access_token")))
+    .toBe("keep-me");
+});
+
+test("401 会清除失效 Bearer Token 并跳转登录", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.sessionStorage.setItem("office_tools_access_token", "expired-token");
+  });
+  await page.route("**/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: false,
+        data: null,
+        error: { code: "AUTH_INVALID", message: "登录状态已失效" },
+        request_id: "expired-request",
+      }),
+    });
+  });
+
+  await page.goto("/change-password");
+  await expect(page).toHaveURL(/\/login\?next=%2Fchange-password$/);
+  await expect
+    .poll(() => page.evaluate(() => sessionStorage.getItem("office_tools_access_token")))
+    .toBeNull();
+});

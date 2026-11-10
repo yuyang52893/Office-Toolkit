@@ -21,11 +21,13 @@ import {
   getToken,
   setToken,
 } from "@/lib/auth-storage";
+import { ApiError } from "@/lib/errors";
 import type { AuthUser } from "@/lib/types";
 
 type AuthContextValue = {
   user: AuthUser | null;
   loading: boolean;
+  refreshError: string;
   login: (username: string, password: string) => Promise<AuthUser>;
   logout: () => Promise<void>;
   refresh: () => Promise<AuthUser | null>;
@@ -36,6 +38,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshError, setRefreshError] = useState("");
 
   const refresh = useCallback(async () => {
     if (!getToken()) {
@@ -44,13 +47,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return null;
     }
     setLoading(true);
+    setRefreshError("");
     try {
       const current = await getCurrentUser();
       setUser(current);
       return current;
-    } catch {
-      clearToken(false);
-      setUser(null);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        clearToken(false);
+        setUser(null);
+      } else {
+        setRefreshError("登录状态验证失败，请重试");
+      }
       return null;
     } finally {
       setLoading(false);
@@ -68,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const handleTokenCleared = () => {
       setUser(null);
       setLoading(false);
+      setRefreshError("");
     };
     window.addEventListener(AUTH_TOKEN_CLEARED_EVENT, handleTokenCleared);
     return () => window.removeEventListener(AUTH_TOKEN_CLEARED_EVENT, handleTokenCleared);
@@ -77,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await loginAccount(username, password);
     setToken(result.access_token);
     setUser(result.user);
+    setRefreshError("");
     return result.user;
   }, []);
 
@@ -88,12 +98,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       clearToken(false);
       setUser(null);
+      setRefreshError("");
     }
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, login, logout, refresh }),
-    [user, loading, login, logout, refresh],
+    () => ({ user, loading, refreshError, login, logout, refresh }),
+    [user, loading, refreshError, login, logout, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

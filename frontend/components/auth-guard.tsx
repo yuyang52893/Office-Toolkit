@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { StatusBanner } from "@/components/status-banner";
 
 export function AuthGuard({
   children,
@@ -13,11 +14,11 @@ export function AuthGuard({
   children: ReactNode;
   role?: "user" | "admin";
 }) {
-  const { user, loading } = useAuth();
+  const { user, loading, refreshError, refresh } = useAuth();
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (!loading && !refreshError && !user) {
       window.location.replace(`/login?next=${encodeURIComponent(pathname)}`);
     } else if (
       !loading &&
@@ -26,7 +27,22 @@ export function AuthGuard({
     ) {
       window.location.replace("/change-password");
     }
-  }, [loading, pathname, user]);
+  }, [loading, pathname, refreshError, user]);
+
+  if (refreshError) {
+    return (
+      <div className="mx-auto max-w-xl px-4 py-16">
+        <StatusBanner tone="error">{refreshError}</StatusBanner>
+        <button
+          type="button"
+          onClick={() => void refresh()}
+          className="mt-4 rounded-lg bg-slate-950 px-4 py-2 text-sm font-bold text-white"
+        >
+          重新验证
+        </button>
+      </div>
+    );
+  }
 
   if (loading || !user || (user.must_change_password && pathname !== "/change-password")) {
     return (
