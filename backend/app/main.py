@@ -4,6 +4,7 @@ import logging
 import re
 import time
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -33,23 +34,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        from app.db.session import build_engine, build_session_factory
+        from app.repositories.history_storage import HistoryStorage
         from app.repositories.temp_storage import TempStorage
         from app.services.excel_service import ExcelService
         from app.services.qrcode_service import QRCodeService
 
+        engine = build_engine(runtime_settings.database_url)
         storage = TempStorage(runtime_settings)
+        history_storage = HistoryStorage(runtime_settings)
         app.state.settings = runtime_settings
+        app.state.db_engine = engine
+        app.state.db_session_factory = build_session_factory(engine)
         app.state.storage = storage
+        app.state.history_storage = history_storage
         app.state.excel_service = ExcelService(runtime_settings, storage)
         app.state.qrcode_service = QRCodeService(runtime_settings)
         storage.prepare()
+        history_storage.prepare()
 
         async def cleanup_loop() -> None:
             while True:
                 try:
                     await asyncio.to_thread(storage.cleanup_expired)
+                    if runtime_settings.app_env != "test":
+                        with app.state.db_session_factory() as session:
+                            from app.services.audit import AuditService
+                            from app.services.history import HistoryService
+
+                            AuditService(session).purge_expired(datetime.now(UTC))
+                            HistoryService(
+                                session=session,
+                                settings=runtime_settings,
+                                storage=app.state.history_storage,
+                            ).cleanup(now=datetime.now(UTC))
                 except Exception:
-                    logger.exception("Temporary file cleanup failed")
+                    logger.exception("Scheduled cleanup failed")
                 await asyncio.sleep(runtime_settings.cleanup_interval_seconds)
 
         cleanup_task = asyncio.create_task(cleanup_loop())
@@ -59,6 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             cleanup_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await cleanup_task
+            engine.dispose()
 
     app = FastAPI(
         title=runtime_settings.app_name,
@@ -72,15 +93,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         window_seconds=runtime_settings.rate_limit_window_seconds,
         max_entries=runtime_settings.rate_limit_max_entries,
     )
+    app.state.auth_login_limiter = RateLimiter(
+        window_seconds=runtime_settings.rate_limit_window_seconds,
+        max_entries=runtime_settings.rate_limit_max_entries,
+    )
+    app.state.auth_recovery_question_limiter = RateLimiter(
+        window_seconds=runtime_settings.rate_limit_window_seconds,
+        max_entries=runtime_settings.rate_limit_max_entries,
+    )
+    app.state.auth_recovery_password_limiter = RateLimiter(
+        window_seconds=runtime_settings.auth_recovery_password_window_seconds,
+        max_entries=runtime_settings.rate_limit_max_entries,
+    )
     app.state.alerter = WebhookAlerter(runtime_settings)
     if cors_origins:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=cors_origins,
             allow_credentials=False,
-            allow_methods=["GET", "POST", "OPTIONS"],
-            allow_headers=["Content-Type", "X-Request-ID"],
-            expose_headers=["X-Request-ID", "Retry-After"],
+            allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+            allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+            expose_headers=[
+                "X-Request-ID",
+                "Retry-After",
+                "X-History-Status",
+                "X-History-Id",
+                "X-History-Notice",
+                "X-MAC-Normalized",
+            ],
             max_age=600,
         )
 
@@ -238,8 +278,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router, prefix=runtime_settings.api_prefix)
 
     try:
-        from app.routers import excel, qrcode
+        from app.routers import admin, audit_logs, auth, excel, history, qrcode
 
+        app.include_router(admin.router, prefix=runtime_settings.api_prefix)
+        app.include_router(audit_logs.router, prefix=runtime_settings.api_prefix)
+        app.include_router(audit_logs.runtime_router, prefix=runtime_settings.api_prefix)
+        app.include_router(auth.router, prefix=runtime_settings.api_prefix)
+        app.include_router(history.router, prefix=runtime_settings.api_prefix)
         app.include_router(excel.router, prefix=runtime_settings.api_prefix)
         app.include_router(excel.result_router, prefix=runtime_settings.api_prefix)
         app.include_router(qrcode.router, prefix=runtime_settings.api_prefix)

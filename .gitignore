@@ -14,7 +14,8 @@ backend/.coverage
 backend/htmlcov/
 backend/tmp/
 backend/logs/
-logs/
+backend/history/
+/logs/
 
 # Python
 __pycache__/
@@ -32,3 +33,4 @@ Thumbs.db
 
 # 其他
 /docx/
+.superpowers/

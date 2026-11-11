@@ -7,15 +7,27 @@ import pytest
 import xlwt
 from fastapi.testclient import TestClient
 from openpyxl import Workbook, load_workbook
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
 
 from app.config import Settings
+from app.db.base import Base
+from app.db.session import build_engine, build_session_factory
 from app.main import create_app
+
+AUTH_REGISTER = {
+    "username": "00123456",
+    "password": "Password1",
+    "recovery_question": "我的验证问题",
+    "recovery_answer": "我的答案",
+}
 
 
 @pytest.fixture
 def test_settings(tmp_path: Path) -> Settings:
     return Settings(
         app_env="test",
+        database_url="sqlite+pysqlite:///:memory:",
         temp_root=tmp_path / "storage",
         log_dir=tmp_path / "logs",
         retention_minutes=30,
@@ -26,7 +38,29 @@ def test_settings(tmp_path: Path) -> Settings:
 @pytest.fixture
 def client(test_settings: Settings) -> Iterator[TestClient]:
     with TestClient(create_app(test_settings)) as test_client:
+        Base.metadata.create_all(test_client.app.state.db_engine)
         yield test_client
+
+
+@pytest.fixture
+def db_engine(test_settings: Settings) -> Iterator[Engine]:
+    settings = test_settings.model_copy(
+        update={"database_url": "sqlite+pysqlite:///:memory:"}
+    )
+    engine = build_engine(settings.database_url)
+    Base.metadata.create_all(engine)
+    try:
+        yield engine
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+@pytest.fixture
+def db_session(db_engine: Engine) -> Iterator[Session]:
+    factory = build_session_factory(db_engine)
+    with factory() as session:
+        yield session
 
 
 def make_xlsx_bytes() -> bytes:
@@ -82,6 +116,29 @@ def sheet_refs(upload: dict) -> list[dict[str, int | str]]:
         for file in upload["files"]
         for sheet in file["sheets"]
     ]
+
+
+def authenticated_headers(client: TestClient) -> dict[str, str]:
+    registered = client.post("/api/v1/auth/register", json=AUTH_REGISTER)
+    assert registered.status_code == 201, registered.text
+    logged_in = client.post(
+        "/api/v1/auth/login",
+        json={
+            "username": AUTH_REGISTER["username"],
+            "password": AUTH_REGISTER["password"],
+        },
+    )
+    assert logged_in.status_code == 200, logged_in.text
+    return {"Authorization": f"Bearer {logged_in.json()['data']['access_token']}"}
+
+
+def history_count(client: TestClient) -> int:
+    from sqlalchemy import func, select
+
+    from app.db.models import UserHistory
+
+    with client.app.state.db_session_factory() as session:
+        return session.scalar(select(func.count()).select_from(UserHistory)) or 0
 
 
 def read_zip_files(content: bytes) -> dict[str, bytes]:

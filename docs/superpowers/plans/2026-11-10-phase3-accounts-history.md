@@ -262,7 +262,7 @@ git commit -m "feat: 增加密码与 JWT 安全基础"
 
 ---
 
-## Task 2: 注册、登录、找回与改密
+### Task 2: 注册、登录、找回与改密
 
 **Files:**
 - Create: `backend/app/schemas/auth.py`
@@ -377,7 +377,7 @@ git commit -m "feat: 实现账号注册登录与找回密码"
 
 ---
 
-## Task 3: 管理员账号管理与初始化命令
+### Task 3: 管理员账号管理与初始化命令
 
 **Files:**
 - Create: `backend/app/schemas/admin.py`
@@ -453,7 +453,7 @@ git commit -m "feat: 增加管理员账号管理"
 
 ---
 
-## Task 4: 审计日志
+### Task 4: 审计日志
 
 **Files:**
 - Create: `backend/app/repositories/audit.py`
@@ -520,7 +520,7 @@ git commit -m "feat: 增加账号审计日志"
 
 ---
 
-## Task 5: 个人历史存储、配额与生命周期
+### Task 5: 个人历史存储、配额与生命周期
 
 **Files:**
 - Create: `backend/app/repositories/history.py`
@@ -634,7 +634,7 @@ git commit -m "feat: 增加个人历史配额与生命周期"
 
 ---
 
-## Task 6: 接入 Excel、二维码和 MAC 处理结果
+### Task 6: 接入 Excel、二维码和 MAC 处理结果
 
 **Files:**
 - Modify: `backend/app/routers/excel.py`
@@ -732,7 +732,7 @@ git commit -m "feat: 接入登录用户处理历史"
 
 ---
 
-## Task 7: 受限运行错误日志与管理员日志下载
+### Task 7: 受限运行错误日志与管理员日志下载
 
 **Files:**
 - Modify: `backend/app/common/logging.py`
@@ -807,7 +807,7 @@ git commit -m "feat: 增加受限运行错误日志与下载"
 
 ---
 
-## Task 8: 前端认证基础与账号页面
+### Task 8: 前端认证基础与账号页面
 
 **Files:**
 - Create: `frontend/lib/auth-storage.ts`
@@ -889,7 +889,7 @@ git commit -m "feat: 增加前端账号认证"
 
 ---
 
-## Task 9: 个人历史页面
+### Task 9: 个人历史页面
 
 **Files:**
 - Create: `frontend/app/history/page.tsx`
@@ -954,7 +954,7 @@ git commit -m "feat: 增加个人历史页面"
 
 ---
 
-## Task 10: 管理员账号与日志页面
+### Task 10: 管理员账号与日志页面
 
 **Files:**
 - Create: `frontend/app/admin/users/page.tsx`
@@ -1034,7 +1034,7 @@ git commit -m "feat: 增加管理员账号与日志页面"
 
 ---
 
-## Task 11: CSP、部署迁移与全量验收
+### Task 11: CSP、部署迁移与全量验收
 
 **Files:**
 - Create: `frontend/proxy.ts`

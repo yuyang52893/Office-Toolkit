@@ -5,15 +5,18 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { StatusBanner } from "@/components/status-banner";
+import { HistoryNotice } from "@/components/history-notice";
 import { generateQrCode } from "@/lib/api";
 import { getErrorMessage } from "@/lib/format";
 import { normalizeMac } from "@/lib/mac";
+import type { HistoryCapture } from "@/lib/types";
 
 export function MacAddressTool() {
   const [value, setValue] = useState("AA:BB:CC:DD:EE:FF");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
+  const [historyCapture, setHistoryCapture] = useState<HistoryCapture | null>(null);
   const [copied, setCopied] = useState("");
   const previewRef = useRef("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -46,11 +49,14 @@ export function MacAddressTool() {
     }
     setGenerating(true);
     setError("");
+    setHistoryCapture(null);
     try {
-      const { blob } = await generateQrCode(value, 512, "mac");
+      const { blob, history } = await generateQrCode(value, 512, "mac");
       updatePreview(blob);
+      setHistoryCapture(history);
     } catch (generateError) {
       updatePreview(null);
+      setHistoryCapture(null);
       setError(getErrorMessage(generateError));
     } finally {
       setGenerating(false);
@@ -87,6 +93,7 @@ export function MacAddressTool() {
             onChange={(event) => {
               setValue(event.target.value);
               updatePreview(null);
+              setHistoryCapture(null);
               setError("");
             }}
             placeholder="例如 AA:BB:CC:DD:EE:FF"
@@ -159,6 +166,11 @@ export function MacAddressTool() {
             <StatusBanner tone="error">{error}</StatusBanner>
           </div>
         ) : null}
+            {historyCapture ? (
+              <div className="mt-4">
+                <HistoryNotice capture={historyCapture} />
+              </div>
+            ) : null}
       </section>
 
       <section className="surface-card fade-up rounded-2xl p-5 sm:p-7">

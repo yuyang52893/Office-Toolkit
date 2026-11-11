@@ -14,6 +14,7 @@
 
 - FastAPI
 - Python 3.12
+- MySQL 8.4、SQLAlchemy 2.0、PyMySQL、Alembic
 - Pydantic
 - openpyxl、xlrd、Python csv
 - qrcode、Pillow、zxing-cpp
@@ -60,6 +61,8 @@ Router -> Schema -> Service -> Repository -> File System
 - `components/`：可复用按钮、状态提示、返回入口等。
 - `lib/`：API、类型、格式化、演示数据和通用客户端工具。
 
+数据库访问按 Router -> Schema -> Service -> Repository -> SQLAlchemy Session -> MySQL 分层；前端真实 API 全部携带现有 Bearer Token，模拟数据仍只存在于 `demo-api.ts`。
+
 当页面文件持续增大时，应按“上传、工作表选择、处理规则、结果展示”等职责拆分，避免单个组件同时管理所有业务。
 
 ## 5. 演示模式与真实模式
@@ -94,6 +97,12 @@ JSON 响应统一为：
 - `POST /api/v1/qrcode/decode`
 - `POST /api/v1/qrcode/mac/parse`
 - `GET /api/v1/health`
+- `POST /api/v1/auth/register|login|logout|recovery-question|reset-password|change-password`
+- `GET /api/v1/auth/me`
+- `GET /api/v1/history`、`GET /api/v1/history/{id}/download`
+- `GET/PATCH /api/v1/admin/users...`
+- `GET /api/v1/admin/audit-logs...`
+- `GET /api/v1/admin/runtime-errors...`
 
 约定：
 
@@ -101,6 +110,11 @@ JSON 响应统一为：
 - 临时资源使用服务端 UUID 或不可猜测 ID。
 - 文件下载成功时直接返回二进制。
 - 文件路径永不直接使用用户提供的名称。
+- 账号、历史和审计数据存 MySQL；结果文件存独立历史卷，数据库不保存文件二进制。
+- JWT 使用 `Authorization: Bearer`，有效期 12 小时；密码和找回答案只保存 Argon2 哈希。
+- 普通注册只能创建 `user`，首个 `admin` 通过 CLI 创建。
+- 每用户历史配额为 10 个活跃结果、200MB，30 分钟失效，占位记录保留 3 小时。
+- 操作审计保留 30 天；运行错误文件保留 14 天、单日 5MB、总量 64MB。
 
 ## 7. 文件与安全
 
@@ -133,6 +147,7 @@ uv run pytest
 
 测试覆盖正常流程、参数错误、损坏文件、超限、空行、重复行、表头策略、CSV 编码和过期清理。
 二期额外覆盖日志轮转、敏感查询参数过滤、代理 IP、限流窗口、429 响应、CORS 白名单和告警冷却。
+三期覆盖账号边界、SQL 注入输入、JWT 失效、账号管理、最后管理员保护、历史配额/过期、日志下载和真实账号链路。
 
 ### 前端
 
@@ -181,10 +196,10 @@ Playwright 至少覆盖：
 - 真实前后端桌面端全链路测试与演示模式移动端测试。
 - Docker Compose、前后端镜像和 Nginx 同源代理配置。
 - 结构化请求日志、文件与 Docker 日志轮转、接口限流、受限 CORS 和可选 Webhook 告警。
+- 三期账号、JWT Bearer、个人历史、管理员账号管理和管理员日志中心。
 
 正式验收前应优先：
 
 1. 在安装 Docker 的环境中实际构建并启动 Compose。
-2. 三期规划账号权限和数据库日志查询，不直接读取服务器日志文件。
-3. 只有出现明确任务耗时或排队瓶颈后，再进入异步任务阶段。
+2. 只有出现明确任务耗时或排队瓶颈后，再进入异步任务阶段。
 

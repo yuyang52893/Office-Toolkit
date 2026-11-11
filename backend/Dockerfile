@@ -16,8 +16,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
+COPY alembic.ini ./
+COPY migrations ./migrations
 RUN useradd --create-home --uid 10001 --user-group appuser \
-    && mkdir -p /data/tmp /data/logs \
+    && mkdir -p /data/tmp /data/logs /data/history \
     && chown -R appuser:appuser /data
 
 USER appuser

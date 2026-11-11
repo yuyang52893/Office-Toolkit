@@ -1,7 +1,7 @@
 from pathlib import Path
 from urllib.parse import urlparse
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,12 +16,31 @@ class Settings(BaseSettings):
     app_name: str = "轻办公工具箱 API"
     app_env: str = "development"
     api_prefix: str = "/api/v1"
+    database_url: str = (
+        "mysql+pymysql://office_tools:office_tools_dev@127.0.0.1:3306/"
+        "office_tools?charset=utf8mb4"
+    )
+    jwt_secret: str = "development-only-change-this-secret-32"
+    jwt_expire_minutes: int = Field(default=720, ge=1, le=24 * 60)
+    auth_login_per_minute: int = Field(default=10, ge=1)
+    auth_recovery_question_per_minute: int = Field(default=5, ge=1)
+    auth_recovery_password_per_minute: int = Field(default=5, ge=1)
+    auth_recovery_password_window_seconds: int = Field(default=900, ge=60, le=3600)
     temp_root: Path = Path("./tmp")
+    history_root: Path = Path("./history")
+    history_max_items: int = Field(default=10, ge=1, le=100)
+    history_max_bytes: int = Field(default=200 * 1024 * 1024, ge=1)
+    history_retention_minutes: int = Field(default=30, ge=1, le=24 * 60)
+    history_placeholder_hours: int = Field(default=3, ge=1, le=24 * 7)
     log_dir: Path = Path("./logs")
-    log_file_name: str = "app.jsonl"
     log_level: str = "INFO"
-    log_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1024)
-    log_backup_count: int = Field(default=7, ge=1, le=100)
+    runtime_log_dir: Path = Path("./logs/runtime-errors")
+    runtime_log_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
+    runtime_log_retention_days: int = Field(default=14, ge=1, le=90)
+    runtime_log_total_bytes: int = Field(
+        default=64 * 1024 * 1024,
+        ge=1024,
+    )
     trust_proxy_headers: bool = False
     rate_limit_per_minute: int = Field(default=60, ge=1)
     excel_rate_limit_per_minute: int = Field(default=10, ge=1)
@@ -49,6 +68,25 @@ class Settings(BaseSettings):
     qr_max_mb: int = Field(default=10, ge=1, le=100)
     qr_max_pixels: int = Field(default=40_000_000, ge=1_000_000, le=200_000_000)
 
+    @model_validator(mode="after")
+    def reject_insecure_production_secrets(self) -> "Settings":
+        if self.app_env != "production":
+            return self
+        secret_material = f"{self.database_url}\n{self.jwt_secret}".lower()
+        insecure_markers = (
+            "office_tools_dev",
+            "development-only",
+            "replace-with",
+            "change-me",
+            "changeme",
+            "example-password",
+        )
+        if any(marker in secret_material for marker in insecure_markers):
+            raise ValueError("生产环境必须使用独立数据库连接信息")
+        if len(self.jwt_secret) < 32:
+            raise ValueError("生产环境必须配置至少 32 个字符的独立 JWT_SECRET")
+        return self
+
     @property
     def max_file_bytes(self) -> int:
         return self.max_file_mb * 1024 * 1024
@@ -64,10 +102,6 @@ class Settings(BaseSettings):
     @property
     def qr_max_bytes(self) -> int:
         return self.qr_max_mb * 1024 * 1024
-
-    @property
-    def log_path(self) -> Path:
-        return self.log_dir / self.log_file_name
 
     @property
     def cors_origin_list(self) -> list[str]:

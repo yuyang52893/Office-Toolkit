@@ -5,7 +5,7 @@
 ## 技术栈
 
 - 前端：Next.js、React、TypeScript、Tailwind CSS
-- 后端：FastAPI、Python 3.12、openpyxl、xlrd、qrcode、zxing-cpp
+- 后端：FastAPI、Python 3.12、MySQL 8.4、SQLAlchemy、Alembic、openpyxl、xlrd、qrcode、zxing-cpp
 - 部署：Docker Compose + Nginx
 
 ## 本地开发
@@ -31,6 +31,7 @@ NEXT_PUBLIC_DEMO_MODE=false
 ```powershell
 cd backend
 uv sync --dev
+uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
 
@@ -75,6 +76,23 @@ docker compose up --build
 
 访问 `http://localhost:8080`。容器构建固定使用真实模式，Nginx 统一代理页面和 `/api`，上传结果存放在 `office-temp` 临时卷中。
 
+### 三期账号与历史
+
+首次启动容器前，根据 `.env.example` 创建 `.env` 并修改 MySQL 密码和 JWT 密钥：
+
+```powershell
+Copy-Item .env.example .env
+docker compose up -d --build
+```
+
+创建首个管理员：
+
+```powershell
+docker compose exec backend python -m app.cli create-admin
+```
+
+注册、登录、找回密码、个人历史、账号管理和日志中心均继续使用现有页面；五个办公工具保持匿名可用。个人历史最多保存 10 个结果或 200MB，结果 30 分钟后失效，过期占位显示 3 小时。
+
 ### 日志
 
 实时查看容器日志：
@@ -84,15 +102,15 @@ docker compose logs -f backend
 docker compose logs -f nginx
 ```
 
-后端同时写入可轮转的 JSON Lines 文件：
+运行错误按日期写入持久化 JSON Lines 文件：
 
 ```powershell
-docker compose exec backend tail -f /data/logs/app.jsonl
-docker compose exec backend sh -c "grep '\"level\":\"ERROR\"' /data/logs/app.jsonl"
-docker compose cp backend:/data/logs/app.jsonl .
+docker compose exec backend sh -c "ls /data/logs/runtime-errors"
+$day = Get-Date -Format yyyy-MM-dd
+docker compose exec backend tail -f "/data/logs/runtime-errors/runtime-errors-$day.jsonl"
 ```
 
-单份日志达到 10MB 后轮转，保留 7 份。Docker 容器日志使用相同的大小和保留策略。
+运行错误日志单日最大 5MB、保留 14 天、总量硬上限 64MB。普通 INFO 请求只进入 Docker 日志。管理员也可在 `/admin/logs` 查看和下载。
 
 ### 二期运维配置
 

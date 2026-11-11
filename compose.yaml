@@ -3,10 +3,33 @@ name: office-tools
 x-logging: &default-logging
   driver: json-file
   options:
-    max-size: "10m"
-    max-file: "7"
+    max-size: "5m"
+    max-file: "3"
 
 services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-office_tools}
+      MYSQL_USER: ${MYSQL_USER:-office_tools}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?请设置 MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请设置 MYSQL_ROOT_PASSWORD}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging: *default-logging
+
   backend:
     build:
       context: ./backend
@@ -15,6 +38,8 @@ services:
       APP_ENV: production
       TEMP_ROOT: /data/tmp
       LOG_DIR: /data/logs
+      RUNTIME_LOG_DIR: /data/logs/runtime-errors
+      HISTORY_ROOT: /data/history
       TRUST_PROXY_HEADERS: "true"
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
       EXCEL_RATE_LIMIT_PER_MINUTE: ${EXCEL_RATE_LIMIT_PER_MINUTE:-10}
@@ -22,11 +47,19 @@ services:
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
       ALERT_WEBHOOK_TIMEOUT_SECONDS: ${ALERT_WEBHOOK_TIMEOUT_SECONDS:-3}
       ALERT_COOLDOWN_SECONDS: ${ALERT_COOLDOWN_SECONDS:-60}
+      DATABASE_URL: ${DATABASE_URL:?请设置 DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET:?请设置 JWT_SECRET}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-720}
     volumes:
       - office-temp:/data/tmp
       - office-logs:/data/logs
+      - office-history:/data/history
     expose:
       - "8000"
+    command:
+      - sh
+      - -c
+      - alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000
     healthcheck:
       test:
         - CMD
@@ -38,6 +71,9 @@ services:
       retries: 5
       start_period: 10s
     logging: *default-logging
+    depends_on:
+      mysql:
+        condition: service_healthy
 
   frontend:
     build:
@@ -70,3 +106,5 @@ services:
 volumes:
   office-temp:
   office-logs:
+  office-history:
+  mysql-data:
